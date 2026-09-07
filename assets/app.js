@@ -17,7 +17,7 @@ function carregarProgresso() {
     const raw = localStorage.getItem(LS_PROGRESSO);
     if (raw) return JSON.parse(raw);
   } catch (e) { /* ignore */ }
-  return { respostas: {}, compromissos: {}, concluidos: {}, perfil: { nome: "" } };
+  return { respostas: {}, escolhas: {}, compromissos: {}, concluidos: {}, perfil: { nome: "" } };
 }
 
 function salvarProgresso(p) {
@@ -158,6 +158,84 @@ function iconeEstudoEl(estudo) {
 }
 
 // ---------------------------------------------------------------------
+// Capas ilustradas — arte vetorial original (paisagem + símbolo do tema),
+// gerada em SVG e embutida como imagem base64 (data URI). Não depende de
+// nenhuma foto de terceiros (evita problemas de direitos autorais e de
+// links quebrados) e reaproveita os mesmos ícones de MOTIVOS acima, então
+// cada estudo ganha uma "capa" coerente com seu tema.
+// ---------------------------------------------------------------------
+
+const PALETAS_CAPA = {
+  livro: ["#7E262C", "#B25A3A", "#F2CB4E"],
+  estrela: ["#1B1330", "#3A1F3D", "#7E262C"],
+  chama: ["#2A0E0E", "#5E1B22", "#C05A22"],
+  cruz: ["#3A1016", "#9C3A3F", "#F2CB4E"],
+  ampulheta: ["#0B3B2E", "#3A1F3D", "#7E262C"],
+  balanca: ["#072921", "#5E1B22", "#9C3A3F"],
+  sol: ["#9C3A3F", "#E3B23C", "#F6DFA0"],
+  gota: ["#072921", "#0B3B2E", "#3F9C86"],
+  moeda: ["#5E1B22", "#B98A2E", "#F2CB4E"],
+  pomba: ["#5E1B22", "#B98A2E", "#FBF3E4"],
+  templo: ["#3A1016", "#9C3A3F", "#D8B98A"],
+  tabua: ["#072921", "#0B3B2E", "#9C3A3F"],
+  arvore: ["#072921", "#0B3B2E", "#4B6B4F"],
+  casa: ["#5E1B22", "#9C3A3F", "#E3B23C"],
+  maos: ["#5E1B22", "#B98A2E", "#F2CB4E"],
+  olho: ["#1B1330", "#5E1B22", "#E3B23C"],
+};
+
+const _cacheCapaSvg = new Map();
+
+function montesSVG() {
+  return `
+    <path d="M0,190 L55,145 L105,178 L165,112 L225,172 L285,132 L335,176 L400,150 L400,240 L0,240 Z" fill="#000" opacity="0.28"/>
+    <path d="M0,212 L75,178 L150,208 L220,168 L300,208 L400,182 L400,240 L0,240 Z" fill="#000" opacity="0.4"/>`;
+}
+
+function capaSVG(motivo) {
+  if (_cacheCapaSvg.has(motivo)) return _cacheCapaSvg.get(motivo);
+  const cores = PALETAS_CAPA[motivo] || PALETAS_CAPA.livro;
+  const path = MOTIVOS[motivo] || MOTIVOS.livro;
+  const uid = "g" + motivo;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240">
+    <defs>
+      <linearGradient id="sky-${uid}" x1="0" y1="0" x2="0.35" y2="1">
+        <stop offset="0" stop-color="${cores[0]}"/>
+        <stop offset="0.55" stop-color="${cores[1]}"/>
+        <stop offset="1" stop-color="${cores[2]}"/>
+      </linearGradient>
+      <radialGradient id="glow-${uid}" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0" stop-color="#FFF7E0" stop-opacity="0.9"/>
+        <stop offset="1" stop-color="#FFF7E0" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="400" height="240" fill="url(#sky-${uid})"/>
+    <circle cx="308" cy="58" r="80" fill="url(#glow-${uid})"/>
+    <circle cx="308" cy="58" r="30" fill="#FFF7E0" opacity="0.85"/>
+    ${montesSVG()}
+    <circle cx="200" cy="112" r="62" fill="#FFFCF5" opacity="0.12"/>
+    <g transform="translate(176,88) scale(2)" fill="none" stroke="#FFFCF5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+      ${path}
+    </g>
+  </svg>`;
+  const b64 = "data:image/svg+xml;base64," + btoa(svg);
+  _cacheCapaSvg.set(motivo, b64);
+  return b64;
+}
+
+function capaEstudoUrl(estudo) {
+  return capaSVG(motivoDoEstudo(estudo));
+}
+
+function capaThumbEl(estudo) {
+  return el("div", { class: "estudo-capa-thumb", style: `background-image:url('${capaEstudoUrl(estudo)}')` });
+}
+
+function capaBannerEl(estudo) {
+  return el("div", { class: "estudo-capa-banner", style: `background-image:url('${capaEstudoUrl(estudo)}')` });
+}
+
+// ---------------------------------------------------------------------
 // Dica estática (sem IA) — apenas reforça a referência bíblica e incentiva
 // a leitura pessoal. Não inventa conteúdo nem entrega respostas prontas.
 // ---------------------------------------------------------------------
@@ -168,7 +246,75 @@ function textoDica(pergunta) {
 }
 
 // ---------------------------------------------------------------------
-// Popup de texto bíblico (NVI) — usa parseReferencias/buscarPassagem de biblia.js
+// Perguntas de múltipla escolha — agora com feedback imediato de certo/
+// errado (antes as opções eram só rótulos decorativos, sem nenhuma
+// interação). Perguntas com uma única opção correta funcionam como
+// múltipla-escolha única (ex.: Sim/Não); perguntas com mais de uma opção
+// correta funcionam como "assinale todas que se aplicam".
+// ---------------------------------------------------------------------
+
+function indicesCorretos(opcoes) {
+  return opcoes.map((o, i) => (o.correta ? i : null)).filter((i) => i !== null);
+}
+
+function toggleOpcao(estudoId, perguntaN, indice, unica) {
+  const p = ESTADO.progresso;
+  const chave = `${estudoId}-${perguntaN}`;
+  const atuais = (p.escolhas && p.escolhas[chave]) || [];
+  let novas;
+  if (unica) {
+    novas = atuais.includes(indice) ? [] : [indice];
+  } else {
+    novas = atuais.includes(indice) ? atuais.filter((i) => i !== indice) : [...atuais, indice];
+  }
+  atualizarProgresso({ ...p, escolhas: { ...(p.escolhas || {}), [chave]: novas } });
+}
+
+function opcoesEl(estudo, pergunta, chave) {
+  const corretas = indicesCorretos(pergunta.opcoes);
+  const unica = corretas.length <= 1;
+  const p = ESTADO.progresso;
+  const selecionadas = (p.escolhas && p.escolhas[chave]) || [];
+  const respondida = selecionadas.length > 0;
+
+  const wrap = el("div", { class: "opcoes-lista" });
+  pergunta.opcoes.forEach((op, i) => {
+    const selecionada = selecionadas.includes(i);
+    let extraClasse = "";
+    let marca = el("span", { class: "opcao-marca" + (unica ? " radio" : "") });
+    if (respondida) {
+      if (op.correta) {
+        extraClasse = " opcao-correta";
+        marca = el("span", { class: "opcao-marca opcao-marca-ok" }, icon("check", 12));
+      } else if (selecionada) {
+        extraClasse = " opcao-errada";
+        marca = el("span", { class: "opcao-marca opcao-marca-erro" }, icon("x", 12));
+      }
+    } else if (selecionada) {
+      extraClasse = " selecionada";
+    }
+    wrap.appendChild(el("button", {
+      type: "button",
+      class: "opcao-linha" + extraClasse,
+      onclick: () => toggleOpcao(estudo.id, pergunta.n, i, unica),
+    }, marca, el("span", { class: "opcao-texto" }, op.texto)));
+  });
+
+  if (respondida) {
+    const acertouTudo = selecionadas.length === corretas.length && selecionadas.every((i) => corretas.includes(i));
+    wrap.appendChild(el("div", { class: "opcoes-feedback" + (acertouTudo ? " ok" : " parcial") },
+      icon(acertouTudo ? "check" : "lightbulb", 14),
+      " " + (acertouTudo
+        ? "Isso mesmo! É o que a passagem ensina."
+        : "Veja a resposta certa destacada acima — vale reler o texto indicado.")
+    ));
+  }
+
+  return wrap;
+}
+
+// ---------------------------------------------------------------------
+// Popup de texto bíblico — usa parseReferencias/buscarPassagem de biblia.js
 // ---------------------------------------------------------------------
 
 let bibliaState = {
@@ -193,7 +339,7 @@ async function carregarReferencia() {
   if (!citacoes.length) {
     bibliaState = { ...bibliaState, carregando: false,
       erro: "Não consegui identificar automaticamente essa referência.",
-      erroLink: "https://www.google.com/search?q=" + encodeURIComponent(refString + " NVI bíblia") };
+      erroLink: "https://www.google.com/search?q=" + encodeURIComponent(refString + " bíblia") };
     render();
     return;
   }
@@ -210,7 +356,7 @@ async function carregarReferencia() {
     if (bibliaState.refString !== refString) return;
     bibliaState = { ...bibliaState, carregando: false,
       erro: (err && err.message) || "Não foi possível buscar o texto agora.",
-      erroLink: err && err.link ? err.link : "https://www.google.com/search?q=" + encodeURIComponent(refString + " NVI bíblia") };
+      erroLink: err && err.link ? err.link : "https://www.google.com/search?q=" + encodeURIComponent(refString + " bíblia") };
   }
   render();
 }
@@ -234,7 +380,7 @@ function modalBiblia() {
     el("div", { class: "sheet-head-title" }, icon("book", 16), bibliaState.refString || "Texto bíblico"),
     el("button", { class: "sheet-close", onclick: fecharBiblia }, icon("x", 18))
   ));
-  sheet.appendChild(el("div", { class: "biblia-versao-row" }, "Versão: Nova Versão Internacional (NVI)"));
+  sheet.appendChild(el("div", { class: "biblia-versao-row" }, "Versão: João Ferreira de Almeida (edição histórica, domínio público)"));
 
   const bodyEl = el("div", { class: "sheet-body biblia-body" });
   if (bibliaState.carregando) {
@@ -266,7 +412,7 @@ function modalBiblia() {
     });
   }
   sheet.appendChild(bodyEl);
-  sheet.appendChild(el("div", { class: "sheet-note" }, "Texto bíblico (NVI) via A Bíblia Digital (abibliadigital.com.br)."));
+  sheet.appendChild(el("div", { class: "sheet-note" }, "Texto de João Ferreira de Almeida (domínio público), via bible-api.com."));
 
   overlay.appendChild(sheet);
   return overlay;
@@ -318,7 +464,10 @@ function telaInicial() {
   ESTUDOS.forEach((e) => {
     const feito = !!p.concluidos?.[e.id];
     const item = el("button", { class: "estudo-item" + (feito ? " feito" : ""), type: "button", onclick: () => abrirEstudo(e.id) },
-      el("div", { class: "estudo-badge" + (feito ? " feito" : "") }, feito ? icon("check", 14) : String(e.id)),
+      el("div", { class: "estudo-capa-wrap" },
+        capaThumbEl(e),
+        el("span", { class: "estudo-badge" + (feito ? " feito" : "") }, feito ? icon("check", 12) : String(e.id))
+      ),
       el("div", { style: "flex:1;min-width:0" },
         el("div", { class: "estudo-titulo" }, e.titulo),
         e.conteudoIncompleto ? el("div", { class: "estudo-flag" }, "conteúdo parcial — página de abertura ausente") : null
@@ -368,7 +517,7 @@ function telaEstudo() {
   const nome = p.perfil?.nome || "";
 
   if (fase === 0) {
-    body.appendChild(iconeEstudoEl(estudo));
+    body.appendChild(capaBannerEl(estudo));
     if (!estudo.conteudoIncompleto) {
       body.appendChild(el("p", { class: "intro-text" }, estudo.intro));
     }
@@ -390,23 +539,28 @@ function telaEstudo() {
     }
     if (pergunta.extra) body.appendChild(el("div", { class: "pergunta-extra" }, pergunta.extra));
     if (pergunta.opcoes) {
-      const lista = el("div", { class: "opcoes-lista" });
-      pergunta.opcoes.forEach((op) => lista.appendChild(el("label", { class: "opcao-linha" }, el("span", { class: "opcao-marca" }), op)));
-      body.appendChild(lista);
+      body.appendChild(opcoesEl(estudo, pergunta, chave));
     }
 
-    const textarea = el("textarea", {
-      class: "resposta", rows: "3",
-      placeholder: "Escreva aqui o que você encontrou lendo o texto indicado…",
-      oninput: (e) => {
-        const novo = { ...p, respostas: { ...p.respostas, [chave]: e.target.value } };
-        p.respostas = novo.respostas; // evita re-render a cada tecla
-        salvarProgresso(novo);
-        ESTADO.progresso = novo;
-      },
-    });
-    textarea.value = p.respostas?.[chave] || "";
-    body.appendChild(textarea);
+    if (!pergunta.opcoes) {
+      const textarea = el("textarea", {
+        class: "resposta", rows: "3",
+        placeholder: "Escreva aqui o que você encontrou lendo o texto indicado…",
+        oninput: (e) => {
+          const novo = { ...p, respostas: { ...p.respostas, [chave]: e.target.value } };
+          p.respostas = novo.respostas; // evita re-render a cada tecla
+          salvarProgresso(novo);
+          ESTADO.progresso = novo;
+        },
+        onblur: () => render(),
+      });
+      textarea.value = p.respostas?.[chave] || "";
+      const respostaWrap = el("div", { class: "resposta-wrap" }, textarea);
+      if ((p.respostas?.[chave] || "").trim().length > 0) {
+        respostaWrap.appendChild(el("div", { class: "resposta-salva" }, icon("check", 12), " resposta salva"));
+      }
+      body.appendChild(respostaWrap);
+    }
 
     if (ESTADO.dicaAberta) {
       body.appendChild(el("div", { class: "dica-box" }, icon("lightbulb", 15), " " + textoDica(pergunta)));
