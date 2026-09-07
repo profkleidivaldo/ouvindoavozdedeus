@@ -1,51 +1,69 @@
 // =====================================================================
-// Integração com A Bíblia Digital (abibliadigital.com.br) — API gratuita,
-// em português, somente leitura. Usada para mostrar o texto NVI de uma
-// referência em popup quando o usuário clica nela dentro do estudo.
+// Texto bíblico ao vivo, para o popup que abre quando o usuário toca numa
+// referência dentro do estudo.
 //
-// Nenhum texto bíblico é embutido no código: tudo vem ao vivo da API.
-// Só a versão NVI é usada (por pedido explícito), o que também simplifica
-// a interface (sem seletor de versão).
+// Histórico: a versão anterior usava a API "A Bíblia Digital"
+// (abibliadigital.com.br) com a versão NVI. Essa API passou a exigir uma
+// chave de autenticação (Authorization: Bearer <token>) para funcionar,
+// o que fazia o botão de referência falhar sempre para quem não tinha uma
+// chave configurada — por isso ele "nunca funcionava".
+//
+// Trocamos para a bible-api.com, que não exige nenhuma chave e serve o
+// texto de João Ferreira de Almeida (edição histórica, de domínio
+// público — a própria API rotula essa tradução como "Public Domain").
+// Por ser de domínio público, também é seguro mantê-la ao vivo e, se um
+// dia a referência falhar, cair para um link de busca como saída de
+// emergência.
 // =====================================================================
 
-const BIBLIA_API_BASE = "https://www.abibliadigital.com.br/api";
-const BIBLIA_VERSAO = "nvi";
+const BIBLIA_API_BASE = "https://bible-api.com";
+const BIBLIA_VERSAO = "almeida";
+const BIBLIA_NOME_VERSAO = "João Ferreira de Almeida (edição histórica)";
 const BIBLIA_TIMEOUT_MS = 8000;
 
 function normalizarTexto(s) {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-// nomes completos (normalizados, sem espaço/acento) -> abreviação da API
+// nomes completos em português (normalizados) -> nome do livro em inglês,
+// que é o identificador aceito pela bible-api.com
 const LIVROS_POR_NOME = {
-  genesis: "gn", exodo: "ex", levitico: "lv", numeros: "nm", deuteronomio: "dt",
-  josue: "js", juizes: "jz", rute: "rt", "1samuel": "1sm", "2samuel": "2sm",
-  "1reis": "1rs", "2reis": "2rs", "1cronicas": "1cr", "2cronicas": "2cr",
-  esdras: "ed", neemias: "ne", ester: "et",
-  salmo: "sl", salmos: "sl", proverbios: "pv", eclesiastes: "ec", cantares: "ct",
-  isaias: "is", jeremias: "jr", lamentacoes: "lm", ezequiel: "ez", daniel: "dn",
-  oseias: "os", joel: "jl", amos: "am", obadias: "ob", jonas: "jn",
-  miqueias: "mq", naum: "na", habacuque: "hc", sofonias: "sf", ageu: "ag",
-  zacarias: "zc", malaquias: "ml",
-  mateus: "mt", marcos: "mc", lucas: "lc", joao: "jo", atos: "at",
-  romanos: "rm", "1corintios": "1co", "2corintios": "2co", galatas: "gl",
-  efesios: "ef", filipenses: "fp", colossenses: "cl",
-  "1tessalonicenses": "1ts", "2tessalonicenses": "2ts",
-  "1timoteo": "1tm", "2timoteo": "2tm", tito: "tt", filemom: "fm",
-  hebreus: "hb", tiago: "tg", "1pedro": "1pe", "2pedro": "2pe",
-  "1joao": "1jo", "2joao": "2jo", "3joao": "3jo", judas: "jd", apocalipse: "ap",
+  genesis: "genesis", exodo: "exodus", levitico: "leviticus", numeros: "numbers", deuteronomio: "deuteronomy",
+  josue: "joshua", juizes: "judges", rute: "ruth", "1samuel": "1samuel", "2samuel": "2samuel",
+  "1reis": "1kings", "2reis": "2kings", "1cronicas": "1chronicles", "2cronicas": "2chronicles",
+  esdras: "ezra", neemias: "nehemiah", ester: "esther",
+  salmo: "psalms", salmos: "psalms", proverbios: "proverbs", eclesiastes: "ecclesiastes", cantares: "songofsolomon",
+  isaias: "isaiah", jeremias: "jeremiah", lamentacoes: "lamentations", ezequiel: "ezekiel", daniel: "daniel",
+  oseias: "hosea", joel: "joel", amos: "amos", obadias: "obadiah", jonas: "jonah",
+  miqueias: "micah", naum: "nahum", habacuque: "habakkuk", sofonias: "zephaniah", ageu: "haggai",
+  zacarias: "zechariah", malaquias: "malachi",
+  mateus: "matthew", marcos: "mark", lucas: "luke", joao: "john", atos: "acts",
+  romanos: "romans", "1corintios": "1corinthians", "2corintios": "2corinthians", galatas: "galatians",
+  efesios: "ephesians", filipenses: "philippians", colossenses: "colossians",
+  "1tessalonicenses": "1thessalonians", "2tessalonicenses": "2thessalonians",
+  "1timoteo": "1timothy", "2timoteo": "2timothy", tito: "titus", filemom: "philemon",
+  hebreus: "hebrews", tiago: "james", "1pedro": "1peter", "2pedro": "2peter",
+  "1joao": "1john", "2joao": "2john", "3joao": "3john", judas: "jude", apocalipse: "revelation",
 };
 
 // abreviações já usadas diretamente nos dados (ex.: "Hb 9:6", "Êx 40:22")
-// também resolvem, mapeando para si mesmas.
-const ABREVIACOES_DIRETAS = [
-  "gn","ex","lv","nm","dt","js","jz","rt","1sm","2sm","1rs","2rs","1cr","2cr",
-  "ed","ne","et","job","sl","pv","ec","ct","is","jr","lm","ez","dn","os","jl",
-  "am","ob","jn","mq","na","hc","sf","ag","zc","ml","mt","mc","lc","jo","at",
-  "rm","1co","2co","gl","ef","fp","cl","1ts","2ts","1tm","2tm","tt","fm","hb",
-  "tg","1pe","2pe","1jo","2jo","3jo","jd","ap",
-];
-ABREVIACOES_DIRETAS.forEach((a) => { LIVROS_POR_NOME[a] = a; });
+// também precisam resolver para o nome em inglês aceito pela API.
+const ABREVIACOES_DIRETAS = {
+  gn: "genesis", ex: "exodus", lv: "leviticus", nm: "numbers", dt: "deuteronomy",
+  js: "joshua", jz: "judges", rt: "ruth", "1sm": "1samuel", "2sm": "2samuel",
+  "1rs": "1kings", "2rs": "2kings", "1cr": "1chronicles", "2cr": "2chronicles",
+  ed: "ezra", ne: "nehemiah", et: "esther", job: "job", sl: "psalms", pv: "proverbs",
+  ec: "ecclesiastes", ct: "songofsolomon", is: "isaiah", jr: "jeremiah", lm: "lamentations",
+  ez: "ezekiel", dn: "daniel", os: "hosea", jl: "joel", am: "amos", ob: "obadiah",
+  jn: "jonah", mq: "micah", na: "nahum", hc: "habakkuk", sf: "zephaniah", ag: "haggai",
+  zc: "zechariah", ml: "malachi", mt: "matthew", mc: "mark", lc: "luke", jo: "john",
+  at: "acts", rm: "romans", "1co": "1corinthians", "2co": "2corinthians", gl: "galatians",
+  ef: "ephesians", fp: "philippians", cl: "colossians", "1ts": "1thessalonians",
+  "2ts": "2thessalonians", "1tm": "1timothy", "2tm": "2timothy", tt: "titus", fm: "philemon",
+  hb: "hebrews", tg: "james", "1pe": "1peter", "2pe": "2peter", "1jo": "1john",
+  "2jo": "2john", "3jo": "3john", jd: "jude", ap: "revelation",
+};
+Object.entries(ABREVIACOES_DIRETAS).forEach(([abbrev, ingles]) => { LIVROS_POR_NOME[abbrev] = ingles; });
 
 // "Jó" é um caso especial: sem acento normaliza para "jo", que colide com
 // "João". Resolvido checando a grafia original antes de normalizar.
@@ -56,7 +74,7 @@ function resolverLivro(tokenOriginal) {
   return LIVROS_POR_NOME[key] || null;
 }
 
-// Extrai uma lista de citações {original, abbrev, nomeLivro, capitulo, vIni, vFim}
+// Extrai uma lista de citações {original, ingles, nomeLivro, capitulo, vIni, vFim}
 // de uma string de referência como "Mateus 24:6, 7, 10; 2Timóteo 3:1-4".
 // Referências sem nome de livro (ex.: "8:32" após "João 16:13;") herdam o
 // livro da citação anterior na mesma string.
@@ -73,9 +91,9 @@ function parseReferencias(refString) {
     let resto = null;
 
     if (mLivro) {
-      const abbrev = resolverLivro(mLivro[1]);
-      if (abbrev) {
-        livroAtual = abbrev;
+      const ingles = resolverLivro(mLivro[1]);
+      if (ingles) {
+        livroAtual = ingles;
         nomeAtual = mLivro[1].trim();
         capituloStr = mLivro[2];
         resto = mLivro[3] || null;
@@ -93,7 +111,7 @@ function parseReferencias(refString) {
     const numeros = resto ? [...resto.matchAll(/\d+/g)].map((m) => parseInt(m[0], 10)) : [];
     resultados.push({
       original: parte,
-      abbrev: livroAtual,
+      ingles: livroAtual,
       nomeLivro: nomeAtual,
       capitulo: parseInt(capituloStr, 10),
       vIni: numeros.length ? Math.min(...numeros) : null,
@@ -106,7 +124,7 @@ function parseReferencias(refString) {
 // Link de emergência: se a API falhar por qualquer razão, o usuário ainda
 // consegue chegar ao texto com um clique, via busca.
 function linkBuscaAlternativa(citacao) {
-  const termo = `${citacao.nomeLivro || citacao.abbrev} ${citacao.capitulo}${citacao.vIni ? ":" + citacao.vIni : ""} NVI bíblia`;
+  const termo = `${citacao.nomeLivro || citacao.ingles} ${citacao.capitulo}${citacao.vIni ? ":" + citacao.vIni : ""} bíblia`;
   return "https://www.google.com/search?q=" + encodeURIComponent(termo);
 }
 
@@ -116,15 +134,19 @@ function fetchComTimeout(url, ms) {
   return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
-// cache simples em memória: evita rebuscar o mesmo capítulo na mesma sessão
+// cache simples em memória: evita rebuscar a mesma passagem na mesma sessão
 const _cacheBiblia = new Map();
 
 async function buscarPassagem(citacao) {
-  const chave = `${citacao.abbrev}:${citacao.capitulo}`;
+  const rangeStr = citacao.vIni
+    ? `:${citacao.vIni}${citacao.vFim && citacao.vFim !== citacao.vIni ? "-" + citacao.vFim : ""}`
+    : "";
+  const chave = `${citacao.ingles}:${citacao.capitulo}${rangeStr}`;
   let dados = _cacheBiblia.get(chave);
 
   if (!dados) {
-    const url = `${BIBLIA_API_BASE}/verses/${BIBLIA_VERSAO}/${citacao.abbrev}/${citacao.capitulo}`;
+    const query = `${citacao.ingles} ${citacao.capitulo}${rangeStr}`;
+    const url = `${BIBLIA_API_BASE}/${encodeURIComponent(query)}?translation=${BIBLIA_VERSAO}`;
     let ultimoErro = null;
     // uma tentativa + uma nova tentativa automática, para lidar com falhas passageiras
     for (let tentativa = 0; tentativa < 2; tentativa++) {
@@ -132,7 +154,9 @@ async function buscarPassagem(citacao) {
         const resp = await fetchComTimeout(url, BIBLIA_TIMEOUT_MS);
         if (resp.status === 429) throw new Error("limite");
         if (!resp.ok) throw new Error("http" + resp.status);
-        dados = await resp.json();
+        const json = await resp.json();
+        if (json.error) throw new Error(json.error);
+        dados = json;
         break;
       } catch (err) {
         ultimoErro = err;
@@ -140,7 +164,7 @@ async function buscarPassagem(citacao) {
     }
     if (!dados) {
       const motivo = ultimoErro && ultimoErro.message === "limite"
-        ? "O limite de uso gratuito da API foi atingido por agora."
+        ? "O serviço de texto bíblico está temporariamente sobrecarregado."
         : "Não foi possível contatar o serviço de texto bíblico agora.";
       const erro = new Error(motivo);
       erro.link = linkBuscaAlternativa(citacao);
@@ -149,9 +173,9 @@ async function buscarPassagem(citacao) {
     _cacheBiblia.set(chave, dados);
   }
 
-  let versiculos = dados.verses || [];
-  if (citacao.vIni) {
-    versiculos = versiculos.filter((v) => v.number >= citacao.vIni && v.number <= (citacao.vFim || citacao.vIni));
-  }
-  return { nomeLivro: dados.book?.name || citacao.nomeLivro, versiculos };
+  const versiculos = (dados.verses || []).map((v) => ({
+    number: v.verse,
+    text: (v.text || "").replace(/\s+/g, " ").trim(),
+  }));
+  return { nomeLivro: citacao.nomeLivro || dados.verses?.[0]?.book_name, versiculos };
 }
