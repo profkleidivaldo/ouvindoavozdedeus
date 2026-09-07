@@ -78,7 +78,6 @@ function icon(name, size) { return svgIcon(ICONS[name] || "", size); }
 // =====================================================================
 
 let bibliaState = { aberto:false, carregando:false, erro:null, refString:null, passagens:[] };
-const _cacheBiblia = new Map();
 
 function abrirReferencia(refString) {
   bibliaState = { ...bibliaState, aberto:true, carregando:true, erro:null, refString, passagens:[] };
