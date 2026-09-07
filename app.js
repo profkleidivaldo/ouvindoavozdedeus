@@ -1,526 +1,508 @@
 // =====================================================================
-// Ouvindo a Voz de Deus — app estático (GitHub Pages)
-// Sem build step, sem backend. Progresso salvo no localStorage do navegador.
-// O "tutor" de dúvidas funciona OFFLINE por padrão (dicas locais baseadas
-// só no texto do próprio estudo). Opcionalmente, quem quiser pode ligar
-// sua própria chave da API da Anthropic (fica só no navegador da pessoa).
+// Ouvindo a Voz de Deus — app estático (HTML/CSS/JS puro para GitHub Pages)
+// Sem build, sem dependências além de fontes via CDN.
+// Conteúdo dos estudos: ver assets/data.js (fiel ao material original).
 // =====================================================================
 
-const STORAGE_KEY = "ovd_progresso_v1";
-const API_KEY_STORAGE = "ovd_api_key_v1";
+const LS_PROGRESSO = "ovd_progresso_v1";
+const LS_IA_CONFIG = "ovd_ia_config_v1";
 
-const app = document.getElementById("app");
+const root = document.getElementById("app");
 
 // ---------------------------------------------------------------------
-// Estado / persistência
+// Persistência local (substitui window.storage do artifact por localStorage)
 // ---------------------------------------------------------------------
-function estadoPadrao() {
-  return {
-    respostas: {},
-    compromissos: {},
-    concluidos: {},
-    perfil: { nome: "" },
-  };
-}
 
 function carregarProgresso() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...estadoPadrao(), ...JSON.parse(raw) };
-  } catch (e) {
-    console.warn("Não foi possível ler o progresso salvo:", e);
-  }
-  return estadoPadrao();
+    const raw = localStorage.getItem(LS_PROGRESSO);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* ignore */ }
+  return { respostas: {}, compromissos: {}, concluidos: {}, perfil: { nome: "" } };
 }
 
-function salvarProgresso(progresso) {
+function salvarProgresso(p) {
+  try { localStorage.setItem(LS_PROGRESSO, JSON.stringify(p)); } catch (e) { console.error(e); }
+}
+
+function carregarConfigIA() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(progresso));
-  } catch (e) {
-    console.warn("Não foi possível salvar o progresso:", e);
-  }
+    const raw = localStorage.getItem(LS_IA_CONFIG);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* ignore */ }
+  return {
+    endpoint: "https://api.mistral.ai/v1/chat/completions",
+    modelo: "labs-leanstral-1-5",
+    apiKey: "",
+  };
 }
 
-let progresso = carregarProgresso();
-
-function atualizarProgresso(mudancas) {
-  progresso = { ...progresso, ...mudancas };
-  salvarProgresso(progresso);
+function salvarConfigIA(cfg) {
+  try { localStorage.setItem(LS_IA_CONFIG, JSON.stringify(cfg)); } catch (e) { console.error(e); }
 }
 
-// ---------------------------------------------------------------------
-// Roteamento simples via hash (#/ , #/estudo/3)
-// ---------------------------------------------------------------------
-function rotaAtual() {
-  const hash = window.location.hash.replace(/^#\/?/, "");
-  const partes = hash.split("/").filter(Boolean);
-  if (partes[0] === "estudo" && partes[1]) {
-    return { tela: "estudo", id: parseInt(partes[1], 10) };
-  }
-  return { tela: "inicio" };
-}
-
-window.addEventListener("hashchange", renderizar);
-window.addEventListener("DOMContentLoaded", renderizar);
-
-function irPara(hash) {
-  window.location.hash = hash;
-}
-
-// ---------------------------------------------------------------------
-// Ícones (SVG inline, para não depender de bibliotecas externas)
-// ---------------------------------------------------------------------
-const icones = {
-  chevronLeft: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`,
-  chevronRight: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
-  check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
-  message: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>`,
-  sparkles: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2L12 3z"></path><path d="M5 17l.8 2.2L8 20l-2.2.8L5 23l-.8-2.2L2 20l2.2-.8L5 17z"></path></svg>`,
-  send: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`,
-  x: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
-  livro: `<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A2.5 2.5 0 0 1 4.5 2H12v18H4.5A2.5 2.5 0 0 0 2 22.5v-18z"></path><path d="M22 4.5A2.5 2.5 0 0 0 19.5 2H12v18h7.5a2.5 2.5 0 0 1 2.5 2.5v-18z"></path></svg>`,
+let ESTADO = {
+  progresso: carregarProgresso(),
+  iaConfig: carregarConfigIA(),
+  tela: "inicio",
+  estudoId: null,
+  fase: 0,
+  chatAberto: false,
+  configAberto: false,
 };
 
-function el(html) {
-  const div = document.createElement("div");
-  div.innerHTML = html.trim();
-  return div.firstElementChild;
+function set(patch) {
+  ESTADO = { ...ESTADO, ...patch };
+  render();
 }
 
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function atualizarProgresso(novo) {
+  ESTADO.progresso = novo;
+  salvarProgresso(novo);
+  render();
 }
 
 // ---------------------------------------------------------------------
-// Render principal
+// Helpers de texto/DOM
 // ---------------------------------------------------------------------
-function renderizar() {
-  const rota = rotaAtual();
-  app.className = "";
-  app.innerHTML = "";
-  if (rota.tela === "estudo") {
-    const estudo = ESTUDOS.find((e) => e.id === rota.id);
-    if (!estudo) {
-      irPara("#/");
-      return;
-    }
-    app.appendChild(renderTelaEstudo(estudo));
-  } else {
-    app.appendChild(renderTelaInicial());
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") node.className = v;
+    else if (k === "html") node.innerHTML = v;
+    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+    else if (v !== null && v !== undefined) node.setAttribute(k, v);
   }
-  window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
-}
-
-// ---------------------------------------------------------------------
-// Tela inicial
-// ---------------------------------------------------------------------
-function renderTelaInicial() {
-  const concluidos = Object.values(progresso.concluidos || {}).filter(Boolean).length;
-  const pct = Math.round((concluidos / ESTUDOS.length) * 100);
-
-  const wrap = el(`
-    <div class="container-app">
-      <header class="topo-app">
-        <div class="friso"></div>
-        <div class="topo-app-conteudo">
-          <div class="topo-eyebrow">um estudo, um passo de cada vez</div>
-          <h1 class="topo-titulo">Ouvindo a Voz de Deus</h1>
-          <p class="topo-subtitulo">27 estudos bíblicos, no seu tempo, com apoio para tirar dúvidas.</p>
-        </div>
-      </header>
-      <div class="container">
-        <div class="painel" style="margin-bottom:20px;">
-          <label class="campo-nome-rotulo">Como podemos te chamar?</label>
-          <input type="text" class="campo-texto" id="campo-nome" placeholder="Seu nome" value="${escapeHtml(progresso.perfil?.nome || "")}" />
-          <div style="margin-top:14px;">
-            <div class="barra-progresso-wrap">
-              <div class="barra-progresso"><div style="width:${pct}%"></div></div>
-              <span class="barra-progresso-legenda">${concluidos}/${ESTUDOS.length} estudos</span>
-            </div>
-          </div>
-        </div>
-        <div class="lista-estudos" id="lista-estudos"></div>
-        <p class="rodape-nota">
-          O conteúdo dos estudos é reproduzido fielmente do material original. O tutor de apoio (ícone de balão) só usa esse mesmo texto para ajudar — nunca substitui a leitura da Bíblia.
-        </p>
-      </div>
-    </div>
-  `);
-
-  wrap.querySelector("#campo-nome").addEventListener("input", (e) => {
-    atualizarProgresso({ perfil: { ...progresso.perfil, nome: e.target.value } });
-  });
-
-  const lista = wrap.querySelector("#lista-estudos");
-  ESTUDOS.forEach((estudo) => {
-    const feito = !!progresso.concluidos?.[estudo.id];
-    const item = el(`
-      <button class="item-estudo ${feito ? "concluido" : ""}">
-        <div class="selo-estudo">${feito ? icones.check : estudo.id}</div>
-        <div style="flex:1; min-width:0;">
-          <div class="item-estudo-titulo">${escapeHtml(estudo.titulo)}</div>
-          ${estudo.conteudoIncompleto ? `<div class="item-estudo-aviso">conteúdo parcial — página de abertura ausente</div>` : ""}
-        </div>
-        <span class="seta">${icones.chevronRight}</span>
-      </button>
-    `);
-    item.addEventListener("click", () => irPara(`#/estudo/${estudo.id}`));
-    lista.appendChild(item);
-  });
-
-  return wrap;
-}
-
-// ---------------------------------------------------------------------
-// Tela de um estudo (fases: 0 intro, 1..N perguntas, N+1 recap, N+2 compromisso)
-// ---------------------------------------------------------------------
-function renderTelaEstudo(estudo) {
-  const totalPerguntas = estudo.perguntas.length;
-  const faseRecap = totalPerguntas + 1;
-  const faseCompromisso = totalPerguntas + 2;
-
-  let fase = 0; // estado local desta view
-
-  const raiz = el(`<div class="container-app"></div>`);
-
-  function chaveResp(n) { return `${estudo.id}-${n}`; }
-
-  function montarFaixa() {
-    return el(`
-      <header class="faixa-estudo">
-        <div class="friso"></div>
-        <div class="faixa-estudo-linha">
-          <button class="botao-voltar" id="btn-voltar" aria-label="Voltar">${icones.chevronLeft}</button>
-          <div>
-            <div class="faixa-estudo-rotulo">ESTUDO ${estudo.id}</div>
-            <div class="faixa-estudo-titulo">${escapeHtml(estudo.titulo)}</div>
-          </div>
-        </div>
-      </header>
-    `);
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
   }
-
-  function montarImagem() {
-    const nomeArquivo = `images/${estudo.imagem}.jpg`;
-    const box = el(`
-      <div class="imagem-estudo">
-        <img src="${nomeArquivo}" alt="Ilustração do estudo: ${escapeHtml(estudo.titulo)}"
-             onerror="this.style.display='none'; this.parentElement.classList.add('sem-imagem');" />
-        <div class="marca-agua">${icones.livro}</div>
-        <div class="curva-dourada"></div>
-      </div>
-    `);
-    return box;
-  }
-
-  function corpo() {
-    const container = el(`<div class="container"></div>`);
-
-    container.appendChild(montarImagem());
-
-    const trilha = el(`<div class="trilha"><div style="width:${(fase / faseCompromisso) * 100}%"></div></div>`);
-    container.appendChild(trilha);
-
-    if (estudo.conteudoIncompleto && fase === 0) {
-      container.appendChild(el(`<div class="aviso-parcial">${escapeHtml(estudo.intro)}</div>`));
-    }
-
-    const painel = el(`<div class="painel"></div>`);
-    container.appendChild(painel);
-
-    // FASE 0 — introdução
-    if (fase === 0) {
-      if (!estudo.conteudoIncompleto) {
-        painel.appendChild(el(`<p class="intro-estudo">${escapeHtml(estudo.intro)}</p>`));
-      }
-      const primeiroNome = (progresso.perfil?.nome || "").split(" ")[0];
-      const botao = el(`<button class="botao-primario" style="margin-top:22px;">${primeiroNome ? `Começar, ${escapeHtml(primeiroNome)}` : "Começar este estudo"}</button>`);
-      botao.addEventListener("click", () => { fase = 1; rerenderCorpo(); });
-      painel.appendChild(botao);
-    }
-
-    // FASES 1..N — perguntas
-    else if (fase >= 1 && fase <= totalPerguntas) {
-      const pergunta = estudo.perguntas[fase - 1];
-      painel.appendChild(el(`
-        <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:10px;">
-          <span class="pergunta-numero">${pergunta.n}.</span>
-          <span class="pergunta-texto">${escapeHtml(pergunta.texto)}</span>
-        </div>
-      `));
-      if (pergunta.ref) painel.appendChild(el(`<div class="pergunta-ref">${escapeHtml(pergunta.ref)}</div>`));
-      if (pergunta.extra) painel.appendChild(el(`<div class="pergunta-extra">${escapeHtml(pergunta.extra)}</div>`));
-
-      if (pergunta.opcoes) {
-        const listaOp = el(`<div class="opcoes-lista"></div>`);
-        pergunta.opcoes.forEach((op) => {
-          listaOp.appendChild(el(`
-            <label class="opcao-linha"><span class="opcao-caixa"></span>${escapeHtml(op)}</label>
-          `));
-        });
-        painel.appendChild(listaOp);
-      }
-
-      const valorAtual = progresso.respostas?.[chaveResp(pergunta.n)] || "";
-      const textarea = el(`<textarea class="campo-textarea" rows="3" placeholder="Escreva aqui o que você encontrou lendo o texto indicado…">${escapeHtml(valorAtual)}</textarea>`);
-      textarea.addEventListener("input", (e) => {
-        atualizarProgresso({ respostas: { ...progresso.respostas, [chaveResp(pergunta.n)]: e.target.value } });
-      });
-      painel.appendChild(textarea);
-
-      const linhaBotoes = el(`<div class="linha-botoes"></div>`);
-      const btnVoltarFase = el(`<button class="botao-secundario">Voltar</button>`);
-      btnVoltarFase.addEventListener("click", () => { fase -= 1; rerenderCorpo(); });
-      const btnAjuda = el(`<button class="botao-ajuda">${icones.message} Preciso de ajuda</button>`);
-      btnAjuda.addEventListener("click", () => abrirChat(estudo, pergunta));
-      const btnProxima = el(`<button class="botao-primario empurra-direita">${fase === totalPerguntas ? "Ir para a recapitulação" : "Próxima pergunta"}</button>`);
-      btnProxima.addEventListener("click", () => { fase += 1; rerenderCorpo(); });
-
-      linhaBotoes.append(btnVoltarFase, btnAjuda, btnProxima);
-      painel.appendChild(linhaBotoes);
-    }
-
-    // FASE recapitulação
-    else if (fase === faseRecap) {
-      painel.appendChild(el(`<h3 class="serif" style="color:var(--verde-escuro); font-size:19px; margin-bottom:10px;">Recapitulação</h3>`));
-      painel.appendChild(el(`<p class="recap-texto">${escapeHtml(estudo.recap)}</p>`));
-      const linhaBotoes = el(`<div class="linha-botoes"></div>`);
-      const btnVoltarFase = el(`<button class="botao-secundario">Voltar</button>`);
-      btnVoltarFase.addEventListener("click", () => { fase -= 1; rerenderCorpo(); });
-      const btnAjuda = el(`<button class="botao-ajuda">${icones.message} Preciso de ajuda</button>`);
-      btnAjuda.addEventListener("click", () => abrirChat(estudo, null));
-      const btnProxima = el(`<button class="botao-primario empurra-direita">Compromisso de fé</button>`);
-      btnProxima.addEventListener("click", () => { fase += 1; rerenderCorpo(); });
-      linhaBotoes.append(btnVoltarFase, btnAjuda, btnProxima);
-      painel.appendChild(linhaBotoes);
-    }
-
-    // FASE compromisso de fé
-    else if (fase === faseCompromisso) {
-      painel.appendChild(el(`<h3 class="serif" style="color:var(--verde-escuro); font-size:19px; margin-bottom:14px;">Compromisso de fé</h3>`));
-      const caixa = el(`<div class="caixa-compromisso"></div>`);
-      const marcados = progresso.compromissos?.[estudo.id] || estudo.compromisso.map(() => false);
-
-      estudo.compromisso.forEach((c, i) => {
-        const linha = el(`
-          <label class="linha-compromisso">
-            <span class="check-compromisso ${marcados[i] ? "marcado" : ""}">${marcados[i] ? icones.check : ""}</span>
-            <span class="texto-compromisso">${escapeHtml(c)}</span>
-          </label>
-        `);
-        linha.addEventListener("click", () => {
-          const atual = [...(progresso.compromissos?.[estudo.id] || estudo.compromisso.map(() => false))];
-          atual[i] = !atual[i];
-          atualizarProgresso({ compromissos: { ...progresso.compromissos, [estudo.id]: atual } });
-          rerenderCorpo();
-        });
-        caixa.appendChild(linha);
-      });
-
-      const linhaDados = el(`
-        <div class="linha-dados">
-          <input type="text" class="campo-texto" id="input-nome-compromisso" placeholder="Nome" value="${escapeHtml(progresso.perfil?.nome || "")}" style="flex:2;" />
-          <input type="date" class="campo-data" id="input-data-compromisso" style="flex:1;" />
-        </div>
-      `);
-      caixa.appendChild(linhaDados);
-      painel.appendChild(caixa);
-
-      const linhaBotoes = el(`<div class="linha-botoes"></div>`);
-      const btnVoltarFase = el(`<button class="botao-secundario">Voltar</button>`);
-      btnVoltarFase.addEventListener("click", () => { fase -= 1; rerenderCorpo(); });
-      const btnConcluir = el(`<button class="botao-primario botao-concluir empurra-direita">Concluir estudo ${icones.check}</button>`);
-      btnConcluir.addEventListener("click", () => {
-        const nome = raiz.querySelector("#input-nome-compromisso")?.value || progresso.perfil?.nome || "";
-        atualizarProgresso({
-          concluidos: { ...progresso.concluidos, [estudo.id]: true },
-          perfil: { ...progresso.perfil, nome },
-        });
-        irPara("#/");
-      });
-      linhaBotoes.append(btnVoltarFase, btnConcluir);
-      painel.appendChild(linhaBotoes);
-    }
-
-    return container;
-  }
-
-  let corpoAtual = corpo();
-  raiz.appendChild(montarFaixa());
-  raiz.appendChild(corpoAtual);
-
-  function rerenderCorpo() {
-    const novo = corpo();
-    raiz.replaceChild(novo, corpoAtual);
-    corpoAtual = novo;
-    raiz.querySelector("#btn-voltar").addEventListener("click", () => irPara("#/"));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  raiz.querySelector("#btn-voltar").addEventListener("click", () => irPara("#/"));
-
-  return raiz;
+  return node;
 }
+
+const svgIcon = (path, size = 16) =>
+  el("span", { html: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block">${path}</svg>` });
+
+const ICONS = {
+  chevronRight: `<path d="M9 18l6-6-6-6"/>`,
+  chevronLeft: `<path d="M15 18l-6-6 6-6"/>`,
+  check: `<path d="M20 6L9 17l-5-5"/>`,
+  message: `<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>`,
+  send: `<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>`,
+  gear: `<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/>`,
+  x: `<path d="M18 6L6 18"/><path d="M6 6l12 12"/>`,
+};
+
+function icon(name, size) { return svgIcon(ICONS[name] || "", size); }
 
 // ---------------------------------------------------------------------
-// "Tirar dúvida" — funciona OFFLINE por padrão (sem nenhuma chamada de
-// rede), oferecendo uma dica gerada localmente a partir do próprio texto
-// do estudo. Quem quiser ligar um tutor por IA pode informar sua própria
-// chave da API da Anthropic (fica salva só no localStorage do navegador
-// da pessoa — nunca é enviada para nenhum servidor além da própria API).
+// Camada de IA — só entra em ação se o usuário configurou uma chave.
+// Restrita ao texto do estudo em foco. Se falhar (ex.: CORS bloqueado
+// pelo provedor), cai num "dica" estático, sem inventar conteúdo.
 // ---------------------------------------------------------------------
-function obterChaveApi() {
-  try { return localStorage.getItem(API_KEY_STORAGE) || ""; } catch (e) { return ""; }
-}
-function salvarChaveApi(chave) {
-  try {
-    if (chave) localStorage.setItem(API_KEY_STORAGE, chave);
-    else localStorage.removeItem(API_KEY_STORAGE);
-  } catch (e) { /* ignore */ }
-}
 
-function dicaLocal(estudo, pergunta) {
-  if (!pergunta) {
-    return `Releia com calma a recapitulação de "${estudo.titulo}" e tente completar cada lacuna lembrando das perguntas anteriores. Se travar em alguma palavra, volte à pergunta correspondente e confira a referência bíblica outra vez — a resposta está lá.`;
-  }
-  const ref = pergunta.ref ? ` em ${pergunta.ref}` : "";
-  return `Boa pergunta! Abra sua Bíblia${ref} e leia o texto com atenção — a resposta costuma aparecer de forma bem direta. Se ajudar, leia também um versículo antes e depois da referência, para entender o contexto. Não tem pressa: o importante é que você mesmo encontre a resposta lendo a Palavra.`;
-}
-
-async function perguntarTutorIA({ estudo, pergunta, mensagemUsuario, historico }) {
-  const chave = obterChaveApi();
-  if (!chave) return null; // sem chave configurada -> quem chamou usa a dica local
-
-  const contexto = `
-Você é um facilitador de estudo bíblico empático, acolhedor e respeitoso, guiando um estudante pelo material "Ouvindo a Voz de Deus".
+function montarSystemPrompt(estudo, pergunta, nome) {
+  return `Você é um facilitador de estudo bíblico empático, acolhedor e respeitoso, guiando ${nome || "um estudante"} pelo material "Ouvindo a Voz de Deus".
 
 REGRAS ABSOLUTAS:
-1. Baseie-se ESTRITAMENTE no conteúdo do estudo abaixo. Não invente doutrinas, não cite versículos que não estejam listados aqui — em vez disso, incentive a pessoa a abrir a própria Bíblia na referência indicada.
-2. Não altere nem reinterprete o conteúdo do estudo. Se a pergunta fugir do assunto deste estudo específico, gentilmente traga-a de volta ao tema.
-3. Seja breve (2 a 5 frases), caloroso e encorajador. Nunca dê a resposta "certa" da lacuna a preencher — ajude o estudante a pensar e aponte de novo a referência bíblica.
+1. Baseie-se ESTRITAMENTE no conteúdo do estudo abaixo. Não invente doutrinas, não cite versículos que não estejam listados aqui, não parafraseie o texto bíblico em si (você não tem o texto das passagens, apenas as referências) — em vez disso, incentive a pessoa a abrir a própria Bíblia na referência indicada.
+2. Não altere nem reinterprete o conteúdo do estudo. Se a pergunta fugir do tema deste estudo específico, gentilmente traga-a de volta.
+3. Seja breve (2 a 5 frases), caloroso e encorajador. Nunca entregue a resposta "certa" da lacuna a preencher — ajude o estudante a pensar, aponte de novo a referência bíblica, e incentive a leitura pessoal.
 4. Nunca corrija de forma seca; acolha a resposta do estudante com gentileza antes de esclarecer algo.
 
 ESTUDO ATUAL: "${estudo.titulo}" (Estudo ${estudo.id})
 Introdução: ${estudo.intro}
 ${pergunta ? `Pergunta em foco: "${pergunta.texto}" — referência: ${pergunta.ref || "—"}${pergunta.extra ? " — " + pergunta.extra : ""}` : ""}
-Recapitulação do estudo: ${estudo.recap || "—"}
-`.trim();
+Recapitulação do estudo: ${estudo.recap || "—"}`;
+}
 
-  const messages = [...(historico || []), { role: "user", content: mensagemUsuario }];
+function dicaEstatica(pergunta) {
+  if (!pergunta) {
+    return "Vale reler a introdução com calma e depois seguir para a primeira pergunta — cada resposta se apoia no texto bíblico indicado.";
+  }
+  return `Abra sua Bíblia em ${pergunta.ref || "a referência indicada"} e leia o texto com atenção — a resposta está ali. Sem pressa: escreva com suas próprias palavras o que você encontrar.`;
+}
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+async function perguntarIA({ estudo, pergunta, nome, historico, mensagem }) {
+  const cfg = ESTADO.iaConfig;
+  if (!cfg.apiKey || !cfg.endpoint || !cfg.modelo) {
+    throw new Error("IA não configurada");
+  }
+  const system = montarSystemPrompt(estudo, pergunta, nome);
+  const messages = [
+    { role: "system", content: system },
+    ...(historico || []),
+    { role: "user", content: mensagem },
+  ];
+  const resp = await fetch(cfg.endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": chave,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
+      "Authorization": `Bearer ${cfg.apiKey}`,
     },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 500,
-      system: contexto,
-      messages,
-    }),
+    body: JSON.stringify({ model: cfg.modelo, messages, max_tokens: 400 }),
   });
-
-  if (!response.ok) throw new Error(`Falha na API (${response.status})`);
-  const data = await response.json();
-  const texto = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
-  return texto || null;
+  if (!resp.ok) throw new Error("Falha na chamada à API (" + resp.status + ")");
+  const data = await resp.json();
+  const texto = data?.choices?.[0]?.message?.content;
+  if (!texto) throw new Error("Resposta vazia da API");
+  return texto.trim();
 }
 
-function abrirChat(estudo, pergunta) {
-  const historicoMsgs = [];
+// ---------------------------------------------------------------------
+// Telas
+// ---------------------------------------------------------------------
 
-  const fundo = el(`
-    <div class="chat-fundo">
-      <div class="chat-janela">
-        <div class="chat-cabecalho">
-          <div class="chat-cabecalho-titulo">${icones.sparkles} Tirar uma dúvida</div>
-          <button class="chat-fechar">${icones.x}</button>
-        </div>
-        <div class="chat-contexto">Baseado apenas no texto de <strong>${escapeHtml(estudo.titulo)}</strong>${pergunta ? ` · pergunta ${pergunta.n}` : ""}</div>
-        <div class="chat-corpo" id="chat-corpo"></div>
-        <div class="chat-rodape">
-          <input type="text" class="chat-input" id="chat-input" placeholder="Escreva sua dúvida…" />
-          <button class="chat-enviar" id="chat-enviar">${icones.send}</button>
-        </div>
-        <div class="chat-config" id="chat-config"></div>
-      </div>
-    </div>
-  `);
+function render() {
+  root.innerHTML = "";
+  root.appendChild(el("div", { class: "top-utility" }, botaoConfigIA()));
 
-  document.body.appendChild(fundo);
-  fundo.addEventListener("click", (e) => { if (e.target === fundo) fechar(); });
-  fundo.querySelector(".chat-fechar").addEventListener("click", fechar);
+  if (ESTADO.tela === "inicio") root.appendChild(telaInicial());
+  if (ESTADO.tela === "estudo") root.appendChild(telaEstudo());
 
-  function fechar() { fundo.remove(); }
+  if (ESTADO.chatAberto) root.appendChild(chatAjuda());
+  if (ESTADO.configAberto) root.appendChild(modalConfigIA());
+}
 
-  const corpoChat = fundo.querySelector("#chat-corpo");
-  const inputChat = fundo.querySelector("#chat-input");
-  const btnEnviar = fundo.querySelector("#chat-enviar");
-  const configChat = fundo.querySelector("#chat-config");
+function botaoConfigIA() {
+  const ligado = !!ESTADO.iaConfig.apiKey;
+  return el("button", { class: "icon-btn", onclick: () => set({ configAberto: true }) },
+    icon("gear", 14),
+    "IA " + (ligado ? "ativa" : "opcional")
+  );
+}
 
-  function renderConfig() {
-    const temChave = !!obterChaveApi();
-    configChat.innerHTML = temChave
-      ? `Tutor por IA ativado com sua chave da Anthropic. <button class="link" id="btn-remover-chave">Desligar</button>`
-      : `Modo offline: dicas baseadas só no texto do estudo. <button class="link" id="btn-config-chave">Ligar tutor por IA com minha chave da Anthropic</button>`;
-    const btnLigar = configChat.querySelector("#btn-config-chave");
-    if (btnLigar) btnLigar.addEventListener("click", () => {
-      const chave = prompt("Cole sua chave da API da Anthropic (fica salva só neste navegador, no seu aparelho):");
-      if (chave) { salvarChaveApi(chave.trim()); renderConfig(); }
+function telaInicial() {
+  const p = ESTADO.progresso;
+  const concluidos = Object.values(p.concluidos || {}).filter(Boolean).length;
+  const wrap = el("div", { class: "home-wrap" });
+
+  wrap.appendChild(el("div", { class: "home-header" },
+    el("div", { class: "home-kicker" }, "um estudo, um passo de cada vez"),
+    el("h1", { class: "home-title" }, "Ouvindo a Voz de Deus"),
+    el("p", { class: "home-sub" }, "27 estudos bíblicos, no seu tempo, com apoio para tirar dúvidas.")
+  ));
+
+  const nomeInput = el("input", {
+    value: p.perfil?.nome || "",
+    placeholder: "Seu nome",
+    oninput: (e) => atualizarProgresso({ ...p, perfil: { ...p.perfil, nome: e.target.value } }),
+  });
+
+  const progressRow = el("div", { class: "progress-row" },
+    el("div", { class: "progress-track" }, el("div", { class: "progress-fill", style: `width:${Math.round((concluidos / ESTUDOS.length) * 100)}%` })),
+    el("span", { class: "progress-label" }, `${concluidos}/${ESTUDOS.length} estudos`)
+  );
+
+  wrap.appendChild(el("div", { class: "profile-card" },
+    el("label", {}, "Como podemos te chamar?"),
+    nomeInput,
+    progressRow
+  ));
+
+  const lista = el("div", {});
+  ESTUDOS.forEach((e) => {
+    const feito = !!p.concluidos?.[e.id];
+    const item = el("button", { class: "estudo-item" + (feito ? " feito" : ""), onclick: () => set({ tela: "estudo", estudoId: e.id, fase: 0 }) },
+      el("div", { class: "estudo-badge" + (feito ? " feito" : "") }, feito ? icon("check", 14) : String(e.id)),
+      el("div", { style: "flex:1;min-width:0" },
+        el("div", { class: "estudo-titulo" }, e.titulo),
+        e.conteudoIncompleto ? el("div", { class: "estudo-flag" }, "conteúdo parcial — página de abertura ausente") : null
+      ),
+      el("span", { class: "estudo-chev" }, icon("chevronRight", 18))
+    );
+    lista.appendChild(item);
+  });
+  wrap.appendChild(lista);
+
+  wrap.appendChild(el("p", { class: "home-footnote" },
+    "O conteúdo dos estudos é reproduzido fielmente do material original. O tutor de apoio só usa esse mesmo texto para ajudar — nunca substitui a leitura da Bíblia."
+  ));
+
+  return wrap;
+}
+
+function telaEstudo() {
+  const estudo = ESTUDOS.find((e) => e.id === ESTADO.estudoId);
+  if (!estudo) { set({ tela: "inicio" }); return el("div"); }
+
+  const totalPerguntas = estudo.perguntas.length;
+  const faseRecap = totalPerguntas + 1;
+  const faseCompromisso = totalPerguntas + 2;
+  const fase = ESTADO.fase;
+
+  const container = el("div", {});
+
+  container.appendChild(el("div", { class: "estudo-banner" },
+    el("div", { class: "estudo-banner-inner" },
+      el("button", { class: "back-btn", onclick: () => set({ tela: "inicio", estudoId: null, fase: 0 }) }, icon("chevronLeft", 20)),
+      el("div", {},
+        el("div", { class: "estudo-kicker" }, `Estudo ${estudo.id}`),
+        el("div", { class: "estudo-titulo-banner" }, estudo.titulo)
+      )
+    )
+  ));
+
+  const body = el("div", { class: "estudo-body" });
+  body.appendChild(el("div", { class: "mini-progress" }, el("div", { class: "mini-progress-fill", style: `width:${(fase / faseCompromisso) * 100}%` })));
+
+  if (estudo.conteudoIncompleto && fase === 0) {
+    body.appendChild(el("div", { class: "aviso-incompleto" }, estudo.intro));
+  }
+
+  const p = ESTADO.progresso;
+  const nome = p.perfil?.nome || "";
+
+  if (fase === 0) {
+    if (!estudo.conteudoIncompleto) {
+      body.appendChild(el("p", { class: "intro-text" }, estudo.intro));
+    }
+    body.appendChild(el("button", { class: "btn-primario", onclick: () => set({ fase: 1 }) },
+      nome ? `Começar, ${nome.split(" ")[0]}` : "Começar este estudo"
+    ));
+  } else if (fase >= 1 && fase <= totalPerguntas) {
+    const pergunta = estudo.perguntas[fase - 1];
+    const chave = `${estudo.id}-${pergunta.n}`;
+
+    body.appendChild(el("div", { class: "pergunta-cabeca" },
+      el("span", { class: "pergunta-num" }, `${pergunta.n}.`),
+      el("span", { class: "pergunta-texto" }, pergunta.texto)
+    ));
+    if (pergunta.ref) body.appendChild(el("div", { class: "pergunta-ref" }, pergunta.ref));
+    if (pergunta.extra) body.appendChild(el("div", { class: "pergunta-extra" }, pergunta.extra));
+    if (pergunta.opcoes) {
+      const lista = el("div", { class: "opcoes-lista" });
+      pergunta.opcoes.forEach((op) => lista.appendChild(el("label", { class: "opcao-linha" }, el("span", { class: "opcao-marca" }), op)));
+      body.appendChild(lista);
+    }
+
+    const textarea = el("textarea", {
+      class: "resposta", rows: "3",
+      placeholder: "Escreva aqui o que você encontrou lendo o texto indicado…",
+      oninput: (e) => {
+        const novo = { ...p, respostas: { ...p.respostas, [chave]: e.target.value } };
+        p.respostas = novo.respostas; // evita re-render a cada tecla
+        salvarProgresso(novo);
+        ESTADO.progresso = novo;
+      },
     });
-    const btnRemover = configChat.querySelector("#btn-remover-chave");
-    if (btnRemover) btnRemover.addEventListener("click", () => { salvarChaveApi(""); renderConfig(); });
-  }
-  renderConfig();
+    textarea.value = p.respostas?.[chave] || "";
+    body.appendChild(textarea);
 
-  function bolha(texto, autor) {
-    const linha = el(`<div class="bolha-linha ${autor === "user" ? "usuario" : ""}"><div class="bolha ${autor === "user" ? "usuario" : "assistente"}"></div></div>`);
-    linha.querySelector(".bolha").textContent = texto;
-    corpoChat.appendChild(linha);
-    corpoChat.scrollTop = corpoChat.scrollHeight;
-    return linha;
-  }
+    body.appendChild(el("div", { class: "acoes-linha" },
+      el("button", { class: "btn-secundario", onclick: () => set({ fase: fase - 1 }) }, "Voltar"),
+      el("button", { class: "btn-ajuda", onclick: () => set({ chatAberto: true }) }, icon("message", 15), "Preciso de ajuda"),
+      el("button", { class: "btn-primario empurra", style: "margin-top:0", onclick: () => set({ fase: fase + 1 }) },
+        fase === totalPerguntas ? "Ir para a recapitulação" : "Próxima pergunta"
+      )
+    ));
+  } else if (fase === faseRecap) {
+    body.appendChild(el("h3", { class: "recap-titulo" }, "Recapitulação"));
+    body.appendChild(el("p", { class: "recap-texto" }, estudo.recap));
+    body.appendChild(el("div", { class: "acoes-linha" },
+      el("button", { class: "btn-secundario", onclick: () => set({ fase: fase - 1 }) }, "Voltar"),
+      el("button", { class: "btn-ajuda", onclick: () => set({ chatAberto: true }) }, icon("message", 15), "Preciso de ajuda"),
+      el("button", { class: "btn-primario empurra", style: "margin-top:0", onclick: () => set({ fase: fase + 1 }) }, "Compromisso de fé")
+    ));
+  } else if (fase === faseCompromisso) {
+    const marcados = p.compromissos?.[estudo.id] || estudo.compromisso.map(() => false);
+    const box = el("div", { class: "compromisso-box" });
+    estudo.compromisso.forEach((c, i) => {
+      const item = el("label", { class: "compromisso-item", onclick: () => {
+        const atual = [...(p.compromissos?.[estudo.id] || estudo.compromisso.map(() => false))];
+        atual[i] = !atual[i];
+        atualizarProgresso({ ...p, compromissos: { ...p.compromissos, [estudo.id]: atual } });
+      }},
+        el("span", { class: "check-quad" + (marcados[i] ? " marcado" : "") }, marcados[i] ? icon("check", 13) : ""),
+        el("span", { class: "compromisso-texto" }, c)
+      );
+      box.appendChild(item);
+    });
 
-  function bolhaDigitando() {
-    const linha = el(`<div class="bolha-linha"><div class="bolha assistente">digitando…</div></div>`);
-    corpoChat.appendChild(linha);
-    corpoChat.scrollTop = corpoChat.scrollHeight;
-    return linha;
-  }
+    const nomeField = el("input", { placeholder: "Nome", value: nome });
+    const dataField = el("input", { type: "date", placeholder: "Data" });
+    nomeField.addEventListener("input", (e) => { p.perfil = { ...p.perfil, nome: e.target.value }; });
+    box.appendChild(el("div", { class: "linha-nome-data" }, nomeField, dataField));
+    body.appendChild(el("h3", { class: "recap-titulo" }, "Compromisso de fé"));
+    body.appendChild(box);
 
-  async function enviarMensagem(texto) {
-    if (!texto.trim()) return;
-    bolha(texto, "user");
-    historicoMsgs.push({ role: "user", content: texto });
-    inputChat.value = "";
-    btnEnviar.disabled = true;
-    const carregando = bolhaDigitando();
-    try {
-      let resposta = await perguntarTutorIA({ estudo, pergunta, mensagemUsuario: texto, historico: historicoMsgs.slice(0, -1) });
-      if (!resposta) resposta = dicaLocal(estudo, pergunta);
-      carregando.remove();
-      bolha(resposta, "assistant");
-      historicoMsgs.push({ role: "assistant", content: resposta });
-    } catch (e) {
-      carregando.remove();
-      bolha("Não consegui falar com o tutor por IA agora, mas aqui vai uma dica: " + dicaLocal(estudo, pergunta), "assistant");
-    } finally {
-      btnEnviar.disabled = false;
+    body.appendChild(el("div", { class: "acoes-linha" },
+      el("button", { class: "btn-secundario", onclick: () => set({ fase: fase - 1 }) }, "Voltar"),
+      el("button", { class: "btn-primario verde empurra", style: "margin-top:0", onclick: () => {
+        const novo = { ...p, concluidos: { ...p.concluidos, [estudo.id]: true }, perfil: { nome: nomeField.value } };
+        atualizarProgresso(novo);
+        set({ tela: "inicio", estudoId: null, fase: 0 });
+      }}, "Concluir estudo", icon("check", 15))
+    ));
+
+    const proximo = ESTUDOS.find((e) => e.id === estudo.id + 1);
+    if (proximo) {
+      body.appendChild(el("div", { class: "next-banner" },
+        el("div", { class: "next-banner-head" }, "Próximo estudo…"),
+        el("div", { class: "next-banner-body" },
+          el("div", { class: "next-banner-title" }, proximo.titulo),
+          el("div", { class: "next-banner-text" }, (proximo.intro || "").split(". ").slice(0, 2).join(". ") + (proximo.conteudoIncompleto ? "" : "…"))
+        )
+      ));
     }
   }
 
-  btnEnviar.addEventListener("click", () => enviarMensagem(inputChat.value));
-  inputChat.addEventListener("keydown", (e) => { if (e.key === "Enter") enviarMensagem(inputChat.value); });
-
-  // saudação inicial (sempre offline, instantânea)
-  const primeiroNome = (progresso.perfil?.nome || "").split(" ")[0];
-  bolha(
-    `${primeiroNome ? `Oi, ${primeiroNome}! ` : "Oi! "}Estou aqui para ajudar com${pergunta ? " esta pergunta" : " esta parte"} do estudo "${estudo.titulo}". O que você gostaria de entender melhor?`,
-    "assistant"
-  );
-  inputChat.focus();
+  container.appendChild(body);
+  return container;
 }
+
+// ---------------------------------------------------------------------
+// Chat de ajuda
+// ---------------------------------------------------------------------
+
+let chatHistorico = [];
+let chatMensagens = [];
+let chatCarregando = false;
+
+function chatAjuda() {
+  const estudo = ESTUDOS.find((e) => e.id === ESTADO.estudoId);
+  const totalPerguntas = estudo.perguntas.length;
+  const pergunta = ESTADO.fase >= 1 && ESTADO.fase <= totalPerguntas ? estudo.perguntas[ESTADO.fase - 1] : null;
+  const nome = ESTADO.progresso.perfil?.nome || "";
+  const iaOn = !!ESTADO.iaConfig.apiKey;
+
+  if (chatMensagens.length === 0) {
+    chatMensagens = [{ role: "assistant", content: iaOn
+      ? `Oi${nome ? ", " + nome.split(" ")[0] : ""}! Sobre o que você quer conversar nesta pergunta?`
+      : dicaEstatica(pergunta) + "\n\n(Ative a IA no botão “IA opcional” lá em cima para uma conversa mais interativa.)" }];
+  }
+
+  const overlay = el("div", { class: "chat-overlay", onclick: (e) => { if (e.target === overlay) fecharChat(); } });
+  const sheet = el("div", { class: "chat-sheet" });
+
+  sheet.appendChild(el("div", { class: "chat-head" },
+    el("div", { class: "chat-head-title" }, icon("message", 16), "Tirar uma dúvida"),
+    el("button", { class: "chat-close", onclick: fecharChat }, icon("x", 18))
+  ));
+  sheet.appendChild(el("div", { class: "chat-context" }, `Baseado apenas no texto de ${estudo.titulo}${pergunta ? ` · pergunta ${pergunta.n}` : ""}`));
+
+  const bodyEl = el("div", { class: "chat-body" });
+  chatMensagens.forEach((m) => {
+    bodyEl.appendChild(el("div", { class: "msg-row " + m.role },
+      el("div", { class: "msg-bubble " + m.role }, m.content)
+    ));
+  });
+  if (chatCarregando) {
+    bodyEl.appendChild(el("div", { class: "msg-row assistant" }, el("div", { class: "msg-bubble assistant" }, "digitando…")));
+  }
+  sheet.appendChild(bodyEl);
+
+  const input = el("input", { placeholder: "Escreva sua dúvida…" });
+  const sendBtn = el("button", { class: "chat-send" }, icon("send", 16));
+
+  const enviar = async () => {
+    const texto = input.value.trim();
+    if (!texto || chatCarregando) return;
+    chatMensagens.push({ role: "user", content: texto });
+    input.value = "";
+    chatCarregando = true;
+    render();
+    focarChatInput();
+    try {
+      let resp;
+      if (iaOn) {
+        resp = await perguntarIA({
+          estudo, pergunta, nome,
+          historico: chatMensagens.map((m) => ({ role: m.role, content: m.content })),
+          mensagem: texto,
+        });
+      } else {
+        resp = dicaEstatica(pergunta);
+      }
+      chatMensagens.push({ role: "assistant", content: resp });
+    } catch (err) {
+      chatMensagens.push({ role: "assistant", content:
+        "Não consegui falar com a IA agora (pode ser bloqueio de CORS do provedor, ou a chave/endpoint configurados). " +
+        "Aqui vai uma dica sem IA: " + dicaEstatica(pergunta) });
+    } finally {
+      chatCarregando = false;
+      render();
+      focarChatInput();
+    }
+  };
+
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
+  sendBtn.addEventListener("click", enviar);
+
+  sheet.appendChild(el("div", { class: "chat-input-row" }, input, sendBtn));
+  sheet.appendChild(el("div", { class: "chat-note" },
+    iaOn ? "As respostas usam apenas o texto deste estudo." : "Modo sem IA: dicas estáticas baseadas no próprio texto do estudo."
+  ));
+
+  overlay.appendChild(sheet);
+  setTimeout(() => { bodyEl.scrollTop = bodyEl.scrollHeight; focarChatInput(); }, 0);
+  return overlay;
+
+  function focarChatInput() {
+    const i = document.querySelector(".chat-input-row input");
+    if (i) i.focus();
+  }
+}
+
+function fecharChat() {
+  chatMensagens = [];
+  chatHistorico = [];
+  set({ chatAberto: false });
+}
+
+// ---------------------------------------------------------------------
+// Modal de configuração de IA
+// ---------------------------------------------------------------------
+
+function modalConfigIA() {
+  const cfg = { ...ESTADO.iaConfig };
+  const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) set({ configAberto: false }); } });
+
+  const endpointInput = el("input", { value: cfg.endpoint });
+  const modeloInput = el("input", { value: cfg.modelo });
+  const keyInput = el("input", { type: "password", value: cfg.apiKey, placeholder: "cole sua chave de API aqui" });
+
+  const card = el("div", { class: "modal-card" },
+    el("h3", {}, "IA opcional para o tutor"),
+    el("p", { class: "desc" },
+      "Sem isso, o botão “Preciso de ajuda” mostra uma dica estática (sem inventar conteúdo). ",
+      "Configurando uma chave, as respostas passam a ser geradas por IA — sempre restritas ao texto do estudo. ",
+      "A chave fica salva só neste navegador (localStorage), nunca em nenhum arquivo do site."
+    ),
+    el("div", { class: "field" },
+      el("label", {}, "Endpoint (Chat Completions)"),
+      endpointInput,
+      el("div", { class: "field-note" }, "Padrão: Mistral. Troque se usar outro provedor compatível.")
+    ),
+    el("div", { class: "field" },
+      el("label", {}, "Modelo"),
+      modeloInput,
+      el("div", { class: "field-note" }, "labs-leanstral-1-5 é gratuito, mas é otimizado para prova formal (Lean 4), não para conversa — o tom pode sair mais técnico. Troque para mistral-small-latest se preferir um tom mais conversacional.")
+    ),
+    el("div", { class: "field" },
+      el("label", {}, "Chave de API"),
+      keyInput,
+      el("div", { class: "field-note" }, "⚠️ Chamadas são feitas direto do navegador. Se o provedor bloquear CORS, o chat cai automaticamente no modo de dica estática.")
+    ),
+  );
+
+  const actions = el("div", { class: "modal-actions" },
+    el("button", { class: "btn-secundario", onclick: () => {
+      salvarConfigIA({ endpoint: cfg.endpoint, modelo: cfg.modelo, apiKey: "" });
+      set({ iaConfig: carregarConfigIA(), configAberto: false });
+    }}, "Desativar IA"),
+    el("button", { class: "btn-primario", style: "margin-top:0", onclick: () => {
+      const novo = { endpoint: endpointInput.value.trim(), modelo: modeloInput.value.trim(), apiKey: keyInput.value.trim() };
+      salvarConfigIA(novo);
+      set({ iaConfig: novo, configAberto: false });
+    }}, "Salvar")
+  );
+  card.appendChild(actions);
+
+  overlay.appendChild(card);
+  return overlay;
+}
+
+// ---------------------------------------------------------------------
+render();
