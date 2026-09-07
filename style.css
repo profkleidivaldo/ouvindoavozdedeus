@@ -1,285 +1,323 @@
 /* =====================================================================
-   Ouvindo a Voz de Deus — identidade visual
-   Paleta e forma inspiradas no guia de estudo original: faixa verde-escura
-   com título dourado, curva dourada/azul separando o cabeçalho do conteúdo,
-   fundo em tom pergaminho.
+   Ouvindo a Voz de Deus — identidade visual derivada do material original
+   (slides "01 - A Bíblia Sagrada"): bordô + dourado + verde-escuro sobre
+   fundo em tom pergaminho. Cores extraídas por amostragem direta do PPT.
    ===================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Source+Sans+3:wght@400;500;600;700&display=swap');
-
-:root{
-  --verde-escuro: #0e3b2e;
-  --verde-mais-escuro: #082720;
-  --dourado: #c9a227;
-  --dourado-claro: #e7c765;
-  --azul-noite: #1f3a5c;
-  --creme: #faf6ec;
-  --creme-cartao: #fffdf7;
-  --marfim-linha: #e6dcc2;
-  --texto: #2b2620;
-  --texto-suave: #6b6354;
-  --verde-ok: #4f6b4a;
-  --sombra: 0 10px 30px rgba(14, 59, 46, .12);
-  --raio: 14px;
+:root {
+  --maroon-dark: #5E1B22;
+  --maroon: #7E262C;
+  --maroon-light: #9C3A3F;
+  --gold: #E3B23C;
+  --gold-soft: #D8B98A;
+  --gold-bright: #F2CB4E;
+  --green-dark: #0B3B2E;
+  --green-darker: #072921;
+  --paper: #F2E9D8;
+  --paper-card: #FFFCF5;
+  --ink: #2A2118;
+  --ink-soft: #6B5F4C;
+  --border: #E3D5B8;
+  --ok: #4B6B4F;
 }
 
-*{ box-sizing: border-box; }
+* { box-sizing: border-box; }
 
-html,body{
-  margin:0; padding:0;
-  background: var(--creme);
-  color: var(--texto);
-  font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  line-height: 1.55;
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-h1,h2,h3,.serif{
-  font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+h1, h2, h3, .display {
+  font-family: "Baloo 2", "Segoe UI", sans-serif;
+  font-weight: 700;
 }
 
-a{ color: inherit; }
-
-button{ font-family: inherit; }
-
-img{ max-width:100%; display:block; }
-
-/* ---------- fundo decorativo global (linhas suaves tipo pergaminho) ------ */
-body{
-  background-image:
-    radial-gradient(1200px 500px at 10% -10%, rgba(201,162,39,.07), transparent 60%),
-    radial-gradient(900px 400px at 110% 0%, rgba(31,58,92,.06), transparent 55%);
-  background-attachment: fixed;
+button, input, textarea, select {
+  font-family: inherit;
 }
 
-/* ---------------------------- cabeçalho de topo -------------------------- */
-.topo-app{
-  background: linear-gradient(120deg, var(--verde-mais-escuro), var(--verde-escuro) 60%);
-  color: #f7f2df;
-  padding: 22px 20px 46px;
+a { color: inherit; }
+
+.app-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 500px at 100% -10%, rgba(126,38,44,.06), transparent),
+    var(--paper);
+}
+
+/* ---------- topo utilitário (config de IA) ---------- */
+
+.top-utility {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px 0;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.icon-btn:hover { border-color: var(--gold); color: var(--maroon); }
+
+/* ---------- tela inicial ---------- */
+
+.home-wrap { max-width: 720px; margin: 0 auto; padding: 12px 20px 60px; }
+
+.home-header { text-align: center; margin-bottom: 26px; }
+.home-kicker {
+  font-family: "Baloo 2", sans-serif;
+  font-size: 12.5px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--gold);
+  -webkit-text-stroke: .3px var(--maroon-dark);
+  margin-bottom: 6px;
+}
+.home-title {
+  font-size: 33px;
+  color: var(--maroon-dark);
+  margin: 0 0 6px;
+}
+.home-sub { color: var(--ink-soft); font-size: 14.5px; margin: 0; }
+
+.profile-card {
+  background: var(--paper-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 22px;
+  box-shadow: 0 1px 0 rgba(0,0,0,.03);
+}
+.profile-card label { font-size: 12.5px; color: var(--ink-soft); display: block; margin-bottom: 6px; }
+.profile-card input {
+  width: 100%; border: 1px solid var(--border); border-radius: 7px;
+  padding: 9px 12px; font-size: 15px; background: #fff;
+}
+
+.progress-track { height: 7px; border-radius: 999px; background: #E7D9BC; overflow: hidden; flex: 1; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--maroon), var(--gold)); transition: width .4s ease; }
+.progress-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.progress-label { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+
+.estudo-item {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; text-align: left; padding: 13px 15px;
+  margin-bottom: 8px; background: #fff;
+  border: 1px solid var(--border); border-radius: 10px;
+  cursor: pointer; transition: border-color .15s ease, transform .1s ease;
+}
+.estudo-item:hover { border-color: var(--gold); transform: translateX(1px); }
+.estudo-item.feito { background: #FBF3E4; border-color: var(--gold-soft); }
+
+.estudo-badge {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: "Baloo 2", sans-serif; font-size: 14px; color: #fff;
+  background: linear-gradient(155deg, var(--maroon), var(--maroon-dark));
+}
+.estudo-badge.feito { background: linear-gradient(155deg, var(--ok), #3A5A3D); }
+
+.estudo-titulo { font-size: 15.5px; font-weight: 600; color: var(--ink); }
+.estudo-flag { font-size: 11.5px; color: #A9781F; margin-top: 2px; }
+.estudo-chev { color: var(--gold-soft); flex-shrink: 0; }
+
+.home-footnote { text-align: center; font-size: 12px; color: #A0937A; margin-top: 26px; line-height: 1.6; }
+
+/* ---------- cabeçalho de estudo (réplica do banner bordô do slide) ---------- */
+
+.estudo-banner {
   position: relative;
+  background: linear-gradient(100deg, var(--maroon-dark) 0%, var(--maroon) 55%, var(--maroon-light) 100%);
+  color: #fff;
+  padding: 16px 20px 18px;
   overflow: hidden;
 }
-.topo-app::after{
-  content:"";
-  position:absolute; left:0; right:0; bottom:-1px; height: 34px;
-  background: var(--creme);
-  border-radius: 100% 100% 0 0 / 100% 100% 0 0;
-  transform: scaleX(1.4);
+.estudo-banner::after {
+  content: "";
+  position: absolute; top: -40%; right: -10%; width: 55%; height: 220%;
+  background: linear-gradient(100deg, transparent 40%, rgba(227,178,60,.35) 46%, rgba(227,178,60,.55) 50%, transparent 56%);
+  transform: rotate(12deg);
+  pointer-events: none;
 }
-.topo-app .friso{
-  position:absolute; left:0; right:0; bottom: 26px; height: 4px;
-  background: linear-gradient(90deg, var(--dourado-claro), var(--dourado) 40%, var(--azul-noite));
-  opacity:.85;
+.estudo-banner-inner { max-width: 640px; margin: 0 auto; position: relative; display: flex; align-items: center; gap: 12px; }
+.back-btn {
+  background: rgba(255,255,255,.12); border: none; color: #fff; border-radius: 8px;
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
 }
-.topo-app-conteudo{
-  max-width: 760px; margin: 0 auto; position:relative; z-index:2;
-  text-align:center;
-}
-.topo-eyebrow{
-  font-size: 12.5px; letter-spacing: 3px; color: var(--dourado-claro);
-  margin-bottom: 8px; text-transform: lowercase;
-}
-.topo-titulo{
-  font-size: clamp(28px, 5vw, 40px); margin: 0 0 8px; color:#fff;
-  font-weight:700;
-}
-.topo-subtitulo{
-  margin:0; color: rgba(247,242,223,.8); font-size: 15px;
+.back-btn:hover { background: rgba(255,255,255,.22); }
+.estudo-kicker { font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,.85); text-transform: uppercase; }
+.estudo-titulo-banner { font-family: "Baloo 2", sans-serif; font-size: 20px; color: var(--gold-soft); margin-top: 1px; }
+
+/* ---------- corpo do estudo ---------- */
+
+.estudo-body { max-width: 640px; margin: 0 auto; padding: 20px 20px 110px; }
+
+.mini-progress { height: 5px; border-radius: 999px; background: var(--border); overflow: hidden; margin-bottom: 20px; }
+.mini-progress-fill { height: 100%; background: var(--maroon); transition: width .3s ease; }
+
+.aviso-incompleto {
+  background: #FBF2E0; border: 1px solid #E7CB8E; color: #7A5A1E;
+  border-radius: 10px; padding: 13px 15px; margin-bottom: 16px; font-size: 13.5px; line-height: 1.55;
 }
 
-/* faixa de estudo (usada no topo da tela de um estudo específico) */
-.faixa-estudo{
-  background: linear-gradient(120deg, var(--verde-mais-escuro), var(--verde-escuro) 65%);
-  padding: 16px 20px 30px;
-  position: relative;
-  color: #fff;
-}
-.faixa-estudo::after{
-  content:"";
-  position:absolute; left:0; right:0; bottom:-1px; height: 26px;
-  background: var(--creme);
-  border-radius: 100% 100% 0 0 / 100% 100% 0 0;
-  transform: scaleX(1.3);
-}
-.faixa-estudo .friso{
-  position:absolute; left:0; right:0; bottom: 20px; height: 3px;
-  background: linear-gradient(90deg, var(--dourado-claro), var(--dourado) 45%, var(--azul-noite));
-  opacity:.9;
-}
-.faixa-estudo-linha{
-  max-width: 760px; margin: 0 auto; display:flex; align-items:center; gap: 14px; position:relative; z-index:2;
-}
-.botao-voltar{
-  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.25);
-  color:#f7f2df; width:36px; height:36px; border-radius: 50%;
-  display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
-}
-.botao-voltar:hover{ background: rgba(255,255,255,.18); }
-.faixa-estudo-rotulo{ font-size: 11.5px; letter-spacing: 2px; color: var(--dourado-claro); }
-.faixa-estudo-titulo{ font-size: 21px; color:#fff; margin: 2px 0 0; }
+.intro-text { font-size: 16.5px; line-height: 1.75; color: #362B1F; font-family: Georgia, serif; }
 
-/* ------------------------------ contêiner -------------------------------- */
-.container{ max-width: 760px; margin: 0 auto; padding: 0 20px 90px; }
-.container-app{ min-height: 100vh; }
-
-/* --------------------------------- cartões -------------------------------- */
-.painel{
-  background: var(--creme-cartao);
-  border: 1px solid var(--marfim-linha);
-  border-radius: var(--raio);
-  box-shadow: var(--sombra);
-  padding: 20px 22px;
+.btn-primario {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 22px; background: var(--maroon); color: #fff; border: none;
+  border-radius: 999px; padding: 12px 24px; font-size: 15px; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(126,38,44,.25);
 }
+.btn-primario:hover { background: var(--maroon-dark); }
+.btn-primario.verde { background: var(--ok); box-shadow: 0 2px 8px rgba(75,107,79,.25); }
+.btn-primario.verde:hover { background: #3A5A3D; }
 
-.barra-progresso-wrap{ display:flex; align-items:center; gap:10px; }
-.barra-progresso{ flex:1; height:7px; border-radius: 999px; background:#e9e0c8; overflow:hidden; }
-.barra-progresso > div{ height:100%; background: linear-gradient(90deg, var(--dourado), var(--verde-escuro)); transition: width .4s ease; }
-.barra-progresso-legenda{ font-size:12.5px; color: var(--texto-suave); white-space:nowrap; }
+.btn-secundario {
+  background: #fff; color: var(--ink-soft); border: 1px solid var(--border);
+  border-radius: 999px; padding: 11px 20px; font-size: 14.5px; cursor: pointer;
+}
+.btn-secundario:hover { border-color: var(--gold); }
 
-.campo-nome-rotulo{ font-size:13px; color: var(--texto-suave); display:block; margin-bottom:6px; }
-.campo-texto, .campo-textarea, .campo-data{
-  width:100%; border:1px solid var(--marfim-linha); border-radius:8px;
-  padding:10px 13px; font-size:15px; font-family: inherit; background:#fff; color: var(--texto);
+.btn-ajuda {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: #FBF3E4; color: var(--maroon); border: 1px solid var(--gold-soft);
+  border-radius: 999px; padding: 11px 18px; font-size: 14.5px; cursor: pointer;
 }
-.campo-textarea{ resize: vertical; }
-.campo-texto:focus, .campo-textarea:focus, .campo-data:focus{
-  outline: 2px solid var(--dourado-claro); outline-offset: 1px; border-color: var(--dourado);
-}
+.btn-ajuda:hover { background: #F6E9CC; }
 
-/* ------------------------------ lista de estudos -------------------------- */
-.lista-estudos{ margin-top: -26px; position:relative; z-index:3; }
-.item-estudo{
-  display:flex; align-items:center; width:100%; text-align:left; gap:14px;
-  padding: 14px 16px; margin-bottom: 10px;
-  background: var(--creme-cartao);
-  border: 1px solid var(--marfim-linha);
-  border-radius: 10px; cursor:pointer;
-  transition: border-color .15s ease, transform .1s ease;
-  box-shadow: 0 2px 8px rgba(14,59,46,.05);
-}
-.item-estudo:hover{ border-color: var(--dourado); transform: translateY(-1px); }
-.item-estudo.concluido{ background: #f7f1de; border-color: #ddcb96; }
-.selo-estudo{
-  width:34px; height:34px; border-radius:50%; flex-shrink:0;
-  display:flex; align-items:center; justify-content:center;
-  background: var(--verde-escuro); color:#f7f2df; font-family:'Playfair Display', serif; font-size:14px;
-}
-.item-estudo.concluido .selo-estudo{ background: var(--verde-ok); color:#fff; }
-.item-estudo-titulo{ font-size:16px; color:var(--texto); font-weight:600; }
-.item-estudo-aviso{ font-size:12px; color: var(--dourado); margin-top:2px; }
-.item-estudo .seta{ color:#c8bd9c; flex-shrink:0; }
+.acoes-linha { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; align-items: center; }
+.acoes-linha .empurra { margin-left: auto; }
 
-.rodape-nota{ text-align:center; font-size:12.5px; color:#a79b82; margin-top:26px; line-height:1.6; }
+/* pergunta */
 
-/* ------------------------------ tela de estudo ---------------------------- */
-.trilha{ height:5px; border-radius:999px; background:#e9e0c8; overflow:hidden; margin: 18px 0 20px; }
-.trilha > div{ height:100%; background: linear-gradient(90deg, var(--dourado), var(--verde-escuro)); transition: width .3s ease; }
+.pergunta-num { font-family: "Baloo 2", sans-serif; font-size: 23px; color: var(--maroon); }
+.pergunta-texto { font-size: 17px; color: var(--ink); line-height: 1.45; }
+.pergunta-cabeca { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px; }
+.pergunta-ref { font-size: 13.5px; color: #A9781F; margin-bottom: 12px; font-style: italic; }
+.pergunta-extra { font-size: 14px; color: #5A5344; background: #FBF3E4; border-radius: 8px; padding: 11px 13px; margin-bottom: 14px; border: 1px solid var(--border); }
 
-.imagem-estudo{
-  width:100%; aspect-ratio: 16/9; border-radius: 12px; overflow:hidden; margin-bottom:18px;
-  position:relative; background: linear-gradient(135deg, var(--verde-escuro), var(--azul-noite));
-  border: 1px solid var(--marfim-linha);
-}
-.imagem-estudo img{ width:100%; height:100%; object-fit:cover; }
-.imagem-estudo .marca-agua{
-  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-  color: rgba(247,242,223,.55);
-}
-.imagem-estudo .curva-dourada{
-  position:absolute; left:0; right:0; bottom:0; height:38%;
-  background: linear-gradient(0deg, rgba(0,0,0,.35), transparent);
-}
+.opcoes-lista { margin-bottom: 14px; }
+.opcao-linha { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; color: #3A342B; padding: 6px 0; }
+.opcao-marca { width: 18px; height: 18px; border: 1.5px solid var(--gold-soft); border-radius: 5px; flex-shrink: 0; margin-top: 1px; }
 
-.aviso-parcial{
-  background:#fbf2e4; border:1px solid #e7cfa0; border-radius:8px;
-  padding:12px 14px; margin-bottom:16px; font-size:13.5px; color:#7a5a20;
+textarea.resposta {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; font-size: 15px; resize: vertical; background: #fff;
 }
-
-.intro-estudo{ font-size:16.5px; line-height:1.75; color:#3a342b; font-family:'Playfair Display', Georgia, serif; text-align:left; }
-
-.pergunta-numero{ font-family:'Playfair Display', serif; font-size:24px; color: var(--verde-escuro); }
-.pergunta-texto{ font-size:17.5px; color:var(--texto); line-height:1.4; }
-.pergunta-ref{ font-size:13.5px; color: var(--dourado); margin: 6px 0 14px; font-style:italic; }
-.pergunta-extra{ font-size:14px; color:#5a5344; background:#f6f1e0; border-radius:8px; padding:11px 13px; margin-bottom:14px; border-left:3px solid var(--dourado); }
-
-.opcoes-lista{ margin-bottom:14px; }
-.opcao-linha{ display:flex; gap:10px; align-items:flex-start; font-size:14.5px; color:#3a342b; padding:7px 0; cursor:pointer; }
-.opcao-caixa{ width:18px; height:18px; border:1.5px solid #c9bc98; border-radius:5px; flex-shrink:0; margin-top:1px; display:flex; align-items:center; justify-content:center; background:#fff; }
-.opcao-caixa.marcada{ background: var(--verde-escuro); border-color: var(--verde-escuro); }
-.opcao-caixa.marcada svg{ stroke:#fff; }
-
-.linha-botoes{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; align-items:center; }
-.botao-primario{
-  background: var(--verde-escuro); color:#fff; border:none; border-radius:999px;
-  padding: 12px 24px; font-size:15px; cursor:pointer; transition: background .15s ease;
-}
-.botao-primario:hover{ background: var(--verde-mais-escuro); }
-.botao-secundario{
-  background:#fff; color: var(--texto-suave); border:1px solid var(--marfim-linha);
-  border-radius:999px; padding:11px 20px; font-size:14.5px; cursor:pointer;
-}
-.botao-secundario:hover{ border-color: var(--dourado); color: var(--texto); }
-.botao-ajuda{
-  display:flex; align-items:center; gap:6px;
-  background:#f1ecd9; color: var(--verde-escuro); border:1px solid #e2d6a8;
-  border-radius:999px; padding:11px 18px; font-size:14.5px; cursor:pointer;
-}
-.botao-ajuda:hover{ background:#ebe3c6; }
-.empurra-direita{ margin-left:auto; }
-.botao-concluir{ background: var(--verde-ok); }
-.botao-concluir:hover{ background:#3f5a3b; }
-
-/* compromisso de fé */
-.caixa-compromisso{ background:#f6f1e0; border:1px solid #e7ddbf; border-radius:12px; padding:18px 20px; }
-.linha-compromisso{ display:flex; gap:12px; align-items:flex-start; padding:9px 0; cursor:pointer; }
-.check-compromisso{
-  width:21px; height:21px; border-radius:6px; flex-shrink:0; margin-top:1px;
-  border: 1.5px solid #c9bc98; display:flex; align-items:center; justify-content:center; background:transparent;
-}
-.check-compromisso.marcado{ background: var(--verde-ok); border-color: var(--verde-ok); }
-.texto-compromisso{ font-size:15px; color:var(--texto); line-height:1.5; }
-.linha-dados{ display:flex; gap:10px; margin-top:16px; border-top:1px solid #e7ddbf; padding-top:14px; }
+textarea.resposta:focus { outline: none; border-color: var(--gold); }
 
 /* recapitulação */
-.recap-texto{ font-size:15.5px; line-height:1.8; color:#3a342b; }
 
-/* ------------------------------ chat de ajuda ---------------------------- */
-.chat-fundo{
-  position:fixed; inset:0; background: rgba(14,59,46,.35);
-  display:flex; align-items:flex-end; justify-content:center; z-index:60;
+.recap-titulo { font-family: "Baloo 2", sans-serif; color: var(--maroon); font-size: 19px; margin-bottom: 10px; }
+.recap-texto { font-size: 15.5px; line-height: 1.8; color: #3A342B; }
+
+/* compromisso de fé */
+
+.compromisso-box { background: #FBF3E4; border: 1px solid var(--gold-soft); border-radius: 12px; padding: 18px 19px; }
+.compromisso-item { display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; cursor: pointer; }
+.check-quad {
+  width: 21px; height: 21px; border-radius: 6px; flex-shrink: 0; margin-top: 1px;
+  border: 1.5px solid var(--gold-soft); display: flex; align-items: center; justify-content: center;
+  background: #fff;
 }
-.chat-janela{
-  width:100%; max-width: 480px; background: var(--creme-cartao);
-  border-radius: 18px 18px 0 0; max-height: 82vh; display:flex; flex-direction:column;
+.check-quad.marcado { background: var(--ok); border-color: var(--ok); }
+.compromisso-texto { font-size: 15px; line-height: 1.5; color: var(--ink); }
+
+.linha-nome-data { display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid var(--gold-soft); padding-top: 14px; }
+.linha-nome-data input {
+  border: 1px solid var(--border); border-radius: 7px; padding: 9px 11px; font-size: 14px; background: #fff;
+}
+.linha-nome-data input:first-child { flex: 2; }
+.linha-nome-data input:last-child { flex: 1; }
+
+/* faixa "próximo estudo" — réplica do banner verde-escuro do material */
+
+.next-banner {
+  margin-top: 26px; border-radius: 12px; overflow: hidden;
+  background: linear-gradient(100deg, var(--green-darker), var(--green-dark));
+  color: #fff;
+}
+.next-banner-head {
+  padding: 10px 18px; font-family: "Baloo 2", sans-serif; font-size: 13px;
+  letter-spacing: 1.5px; color: var(--gold-bright); text-transform: uppercase;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+.next-banner-body { padding: 16px 18px 20px; }
+.next-banner-title { font-family: "Baloo 2", sans-serif; font-size: 18px; color: var(--gold-soft); margin-bottom: 8px; }
+.next-banner-text { font-size: 14px; line-height: 1.6; color: rgba(255,255,255,.9); }
+
+/* ---------- chat de ajuda ---------- */
+
+.chat-overlay {
+  position: fixed; inset: 0; background: rgba(42,33,24,.4);
+  display: flex; align-items: flex-end; justify-content: center; z-index: 60;
+}
+.chat-sheet {
+  width: 100%; max-width: 480px; background: #FFFCF5; border-radius: 18px 18px 0 0;
+  max-height: 80vh; display: flex; flex-direction: column;
   box-shadow: 0 -10px 34px rgba(0,0,0,.18);
 }
-.chat-cabecalho{ display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--marfim-linha); }
-.chat-cabecalho-titulo{ display:flex; align-items:center; gap:8px; color: var(--verde-escuro); font-weight:600; font-size:14px; }
-.chat-fechar{ background:none; border:none; cursor:pointer; color:#8a8069; }
-.chat-contexto{ padding: 10px 18px 4px; font-size:12.5px; color:#8a8069; }
-.chat-corpo{ flex:1; overflow-y:auto; padding: 8px 18px 12px; }
-.bolha-linha{ display:flex; margin-bottom:10px; }
-.bolha-linha.usuario{ justify-content:flex-end; }
-.bolha{ max-width:82%; padding:9px 13px; border-radius:14px; font-size:14.5px; line-height:1.45; }
-.bolha.assistente{ background:#f1eada; color:var(--texto); border-bottom-left-radius:4px; }
-.bolha.usuario{ background: var(--verde-escuro); color:#fff; border-bottom-right-radius:4px; }
-.chat-rodape{ display:flex; gap:8px; padding: 10px 14px 16px; border-top:1px solid var(--marfim-linha); }
-.chat-input{ flex:1; border:1px solid var(--marfim-linha); border-radius:999px; padding:10px 16px; font-size:14.5px; font-family:inherit; }
-.chat-enviar{
-  width:42px; height:42px; border-radius:50%; border:none; flex-shrink:0;
-  background: var(--verde-escuro); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer;
+.chat-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.chat-head-title { display: flex; align-items: center; gap: 8px; color: var(--maroon); font-size: 14px; font-weight: 600; }
+.chat-close { background: none; border: none; cursor: pointer; color: var(--ink-soft); }
+.chat-context { padding: 9px 18px 2px; font-size: 12px; color: var(--ink-soft); }
+.chat-body { flex: 1; overflow-y: auto; padding: 8px 18px 12px; }
+.msg-row { display: flex; margin-bottom: 10px; }
+.msg-row.user { justify-content: flex-end; }
+.msg-bubble { max-width: 82%; padding: 9px 13px; border-radius: 14px; font-size: 14.5px; line-height: 1.45; }
+.msg-bubble.assistant { background: #F1EADA; color: var(--ink); border-bottom-left-radius: 4px; }
+.msg-bubble.user { background: var(--maroon); color: #fff; border-bottom-right-radius: 4px; }
+.chat-input-row { display: flex; gap: 8px; padding: 10px 14px 16px; border-top: 1px solid var(--border); }
+.chat-input-row input {
+  flex: 1; border: 1px solid var(--border); border-radius: 999px; padding: 10px 16px; font-size: 14.5px; background: #fff;
 }
-.chat-enviar:disabled{ background:#ddd3bc; cursor:default; }
+.chat-send {
+  width: 42px; height: 42px; border-radius: 50%; border: none; flex-shrink: 0; cursor: pointer;
+  background: var(--maroon); color: #fff; display: flex; align-items: center; justify-content: center;
+}
+.chat-send[disabled] { background: #DDD3BC; cursor: default; }
+.chat-note { font-size: 11.5px; color: var(--ink-soft); padding: 0 18px 12px; }
 
-.chat-config{ padding: 6px 18px 12px; border-top: 1px dashed var(--marfim-linha); font-size: 12px; color:#8a8069; }
-.chat-config a, .chat-config button.link{ color: var(--verde-escuro); text-decoration: underline; background:none; border:none; cursor:pointer; padding:0; font: inherit; }
+/* ---------- modal configurar IA ---------- */
 
-/* --------------------------------- utilitários ---------------------------- */
-.centro{ text-align:center; }
-.carregando-tela{ padding:60px 20px; text-align:center; color:#8a8069; }
-.somente-leitura-nota{ font-size:12px; color:#a79b82; margin-top:6px; }
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(42,33,24,.4);
+  display: flex; align-items: center; justify-content: center; z-index: 70; padding: 20px;
+}
+.modal-card {
+  width: 100%; max-width: 440px; background: #FFFCF5; border-radius: 14px;
+  padding: 22px 22px 20px; box-shadow: 0 12px 40px rgba(0,0,0,.2);
+}
+.modal-card h3 { font-family: "Baloo 2", sans-serif; color: var(--maroon); font-size: 19px; margin: 0 0 6px; }
+.modal-card p.desc { font-size: 13px; color: var(--ink-soft); line-height: 1.55; margin: 0 0 16px; }
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 5px; }
+.field input, .field select {
+  width: 100%; border: 1px solid var(--border); border-radius: 7px; padding: 9px 11px;
+  font-size: 14px; background: #fff; box-sizing: border-box;
+}
+.field-note { font-size: 11.5px; color: #A0937A; margin-top: 4px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; }
 
-@media (max-width: 480px){
-  .container{ padding: 0 14px 90px; }
-  .painel{ padding:16px 16px; }
+.badge-ok { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--ok); }
+.badge-off { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #A0937A; }
+
+@media (max-width: 480px) {
+  .home-title { font-size: 27px; }
+  .estudo-titulo-banner { font-size: 17px; }
 }
