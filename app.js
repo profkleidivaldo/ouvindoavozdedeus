@@ -92,6 +92,7 @@ const ICONS = {
   send: `<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>`,
   gear: `<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/>`,
   x: `<path d="M18 6L6 18"/><path d="M6 6l12 12"/>`,
+  book: `<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>`,
 };
 
 function icon(name, size) { return svgIcon(ICONS[name] || "", size); }
@@ -151,6 +152,179 @@ async function perguntarIA({ estudo, pergunta, nome, historico, mensagem }) {
 }
 
 // ---------------------------------------------------------------------
+// Popup de texto bíblico (usa parseReferencias/buscarPassagem de biblia.js)
+// ---------------------------------------------------------------------
+
+let bibliaState = {
+  aberto: false,
+  carregando: false,
+  erro: null,
+  refString: null,
+  versao: "nvi",
+  passagens: [],
+};
+
+function abrirReferencia(refString) {
+  bibliaState = { ...bibliaState, aberto: true, carregando: true, erro: null, refString, passagens: [] };
+  render();
+  carregarReferencia();
+}
+
+async function carregarReferencia() {
+  const refString = bibliaState.refString;
+  const citacoes = typeof parseReferencias === "function" ? parseReferencias(refString) : [];
+
+  if (!citacoes.length) {
+    bibliaState = { ...bibliaState, carregando: false, erro: "Não consegui identificar essa referência automaticamente. Abra sua Bíblia em " + refString + "." };
+    render();
+    return;
+  }
+
+  try {
+    const passagens = [];
+    for (const citacao of citacoes) {
+      const resultado = await buscarPassagem(citacao, bibliaState.versao);
+      passagens.push({ citacao, ...resultado });
+    }
+    // ignora resposta se o usuário já trocou de referência/versão nesse meio tempo
+    if (bibliaState.refString !== refString) return;
+    bibliaState = { ...bibliaState, carregando: false, passagens };
+  } catch (err) {
+    if (bibliaState.refString !== refString) return;
+    bibliaState = { ...bibliaState, carregando: false, erro:
+      "Não consegui buscar o texto agora (a API pode estar fora do ar, com CORS bloqueado, ou o limite de uso gratuito foi atingido). Abra sua Bíblia em " + refString + "." };
+  }
+  render();
+}
+
+function trocarVersaoBiblia(novaVersao) {
+  bibliaState = { ...bibliaState, versao: novaVersao, carregando: true, erro: null };
+  render();
+  carregarReferencia();
+}
+
+function fecharBiblia() {
+  bibliaState = { ...bibliaState, aberto: false, refString: null, passagens: [], erro: null };
+  render();
+}
+
+function modalBiblia() {
+  const overlay = el("div", { class: "chat-overlay", onclick: (e) => { if (e.target === overlay) fecharBiblia(); } });
+  const sheet = el("div", { class: "chat-sheet biblia-sheet" });
+
+  sheet.appendChild(el("div", { class: "chat-head" },
+    el("div", { class: "chat-head-title" }, icon("book", 16), bibliaState.refString || "Texto bíblico"),
+    el("button", { class: "chat-close", onclick: fecharBiblia }, icon("x", 18))
+  ));
+
+  const select = el("select", {
+    class: "biblia-versao-select",
+    onchange: (e) => trocarVersaoBiblia(e.target.value),
+  });
+  (typeof BIBLIA_VERSOES !== "undefined" ? BIBLIA_VERSOES : []).forEach((v) => {
+    const opt = el("option", { value: v.id }, v.nome);
+    if (v.id === bibliaState.versao) opt.setAttribute("selected", "selected");
+    select.appendChild(opt);
+  });
+  sheet.appendChild(el("div", { class: "biblia-versao-row" },
+    el("label", {}, "Versão:"),
+    select
+  ));
+
+  const bodyEl = el("div", { class: "chat-body biblia-body" });
+  if (bibliaState.carregando) {
+    bodyEl.appendChild(el("div", { class: "biblia-loading" }, "Buscando o texto…"));
+  } else if (bibliaState.erro) {
+    bodyEl.appendChild(el("div", { class: "biblia-erro" }, bibliaState.erro));
+  } else if (!bibliaState.passagens.length) {
+    bodyEl.appendChild(el("div", { class: "biblia-erro" }, "Nenhum versículo encontrado para essa referência."));
+  } else {
+    bibliaState.passagens.forEach((p) => {
+      const versiculosAlvo = p.citacao.vIni ? new Set(
+        Array.from({ length: (p.citacao.vFim || p.citacao.vIni) - p.citacao.vIni + 1 }, (_, i) => p.citacao.vIni + i)
+      ) : null;
+      bodyEl.appendChild(el("div", { class: "biblia-passagem" },
+        el("div", { class: "biblia-passagem-titulo" }, `${p.nomeLivro} ${p.citacao.capitulo}`),
+        ...p.versiculos.map((v) => el("p", { class: "biblia-versiculo" + (versiculosAlvo && versiculosAlvo.has(v.number) ? " destaque" : "") },
+          el("sup", {}, String(v.number)),
+          " " + v.text
+        ))
+      ));
+    });
+  }
+  sheet.appendChild(bodyEl);
+
+  sheet.appendChild(el("div", { class: "chat-note" }, "Texto bíblico via A Bíblia Digital (abibliadigital.com.br)."));
+
+  overlay.appendChild(sheet);
+  return overlay;
+}
+
+// ---------------------------------------------------------------------
+// Imagens ilustrativas dos estudos (Wikimedia Commons — acervo livre,
+// sem necessidade de chave de API, uso permitido conforme licença de
+// cada imagem, que é sempre creditada).
+// ---------------------------------------------------------------------
+
+const _cacheImagens = new Map(); // estudoId -> { status: 'loading'|'ok'|'error', url, credito }
+
+async function buscarImagemEstudo(estudo) {
+  const termoBase = (estudo.imagem || estudo.titulo || "")
+    .replace(/^estudo-\d+-/, "")
+    .replace(/-/g, " ")
+    .trim();
+  const consultas = [
+    `${termoBase} bible illustration`,
+    `${estudo.titulo} bible`,
+  ];
+
+  for (const consulta of consultas) {
+    try {
+      const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(consulta)}&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=900&format=json&origin=*`;
+      const resp = await fetch(url);
+      if (!resp.ok) continue;
+      const dados = await resp.json();
+      const paginas = dados?.query?.pages;
+      if (!paginas) continue;
+      const candidatos = Object.values(paginas)
+        .map((pg) => pg.imageinfo && pg.imageinfo[0])
+        .filter((info) => info && info.url && /\.(jpe?g|png)$/i.test(info.url));
+      if (!candidatos.length) continue;
+      const escolhido = candidatos[0];
+      const artista = escolhido.extmetadata?.Artist?.value?.replace(/<[^>]+>/g, "") || "Wikimedia Commons";
+      return { url: escolhido.thumburl || escolhido.url, credito: artista, paginaUrl: escolhido.descriptionurl };
+    } catch (e) {
+      // tenta a próxima consulta
+    }
+  }
+  return null;
+}
+
+function imagemEstudoEl(estudo) {
+  let cache = _cacheImagens.get(estudo.id);
+  if (!cache) {
+    cache = { status: "loading" };
+    _cacheImagens.set(estudo.id, cache);
+    buscarImagemEstudo(estudo).then((res) => {
+      _cacheImagens.set(estudo.id, res ? { status: "ok", ...res } : { status: "error" });
+      if (ESTADO.tela === "estudo" && ESTADO.estudoId === estudo.id && ESTADO.fase === 0) render();
+    });
+  }
+
+  if (cache.status === "ok") {
+    const img = el("div", { class: "estudo-imagem-wrap" },
+      el("img", { class: "estudo-imagem", src: cache.url, alt: estudo.titulo, loading: "lazy" }),
+      el("div", { class: "estudo-imagem-credito" }, "Imagem: " + cache.credito + " · Wikimedia Commons")
+    );
+    return img;
+  }
+  if (cache.status === "loading") {
+    return el("div", { class: "estudo-imagem-wrap estudo-imagem-loading" }, "Buscando imagem ilustrativa…");
+  }
+  return null; // erro silencioso: simplesmente não mostra imagem
+}
+
+// ---------------------------------------------------------------------
 // Telas
 // ---------------------------------------------------------------------
 
@@ -163,6 +337,7 @@ function render() {
 
   if (ESTADO.chatAberto) root.appendChild(chatAjuda());
   if (ESTADO.configAberto) root.appendChild(modalConfigIA());
+  if (bibliaState.aberto) root.appendChild(modalBiblia());
 }
 
 function botaoConfigIA() {
@@ -255,6 +430,8 @@ function telaEstudo() {
   const nome = p.perfil?.nome || "";
 
   if (fase === 0) {
+    const imagemEl = imagemEstudoEl(estudo);
+    if (imagemEl) body.appendChild(imagemEl);
     if (!estudo.conteudoIncompleto) {
       body.appendChild(el("p", { class: "intro-text" }, estudo.intro));
     }
@@ -269,7 +446,11 @@ function telaEstudo() {
       el("span", { class: "pergunta-num" }, `${pergunta.n}.`),
       el("span", { class: "pergunta-texto" }, pergunta.texto)
     ));
-    if (pergunta.ref) body.appendChild(el("div", { class: "pergunta-ref" }, pergunta.ref));
+    if (pergunta.ref) {
+      body.appendChild(el("button", { class: "pergunta-ref pergunta-ref-btn", onclick: () => abrirReferencia(pergunta.ref) },
+        icon("book", 13), " " + pergunta.ref
+      ));
+    }
     if (pergunta.extra) body.appendChild(el("div", { class: "pergunta-extra" }, pergunta.extra));
     if (pergunta.opcoes) {
       const lista = el("div", { class: "opcoes-lista" });
