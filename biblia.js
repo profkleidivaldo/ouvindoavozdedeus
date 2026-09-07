@@ -100,6 +100,22 @@ function parseReferencias(refString) {
   return resultados;
 }
 
+// A API é gratuita e não exige cadastro: sem token, o limite é de
+// 20 requisições/hora por IP; com um token gratuito (obtido em
+// https://www.abibliadigital.com.br), o limite deixa de existir.
+// Opcional: chame configurarTokenBiblia("SEU_TOKEN") a partir do console
+// ou do app para elevar o limite. Sem token, a maior parte dos estudos
+// funciona normalmente graças ao cache em memória por capítulo.
+const LS_TOKEN_BIBLIA = "ovd_biblia_token_v1";
+
+function configurarTokenBiblia(token) {
+  try { localStorage.setItem(LS_TOKEN_BIBLIA, token || ""); } catch (e) { /* ignore */ }
+}
+
+function obterTokenBiblia() {
+  try { return localStorage.getItem(LS_TOKEN_BIBLIA) || ""; } catch (e) { return ""; }
+}
+
 // cache simples em memória: evita rebuscar o mesmo capítulo/versão
 const _cacheBiblia = new Map();
 
@@ -108,7 +124,10 @@ async function buscarPassagem(citacao, versao) {
   let dados = _cacheBiblia.get(chave);
   if (!dados) {
     const url = `${BIBLIA_API_BASE}/verses/${versao}/${citacao.abbrev}/${citacao.capitulo}`;
-    const resp = await fetch(url);
+    const token = obterTokenBiblia();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const resp = await fetch(url, { headers });
+    if (resp.status === 429) throw new Error("Limite de uso gratuito da API atingido por agora (tente novamente em instantes, ou configure um token gratuito).");
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     dados = await resp.json();
     _cacheBiblia.set(chave, dados);
