@@ -2,129 +2,113 @@
 // Texto bíblico ao vivo, para o popup que abre quando o usuário toca numa
 // referência dentro do estudo.
 //
-// Histórico: a versão anterior usava a API "A Bíblia Digital"
-// (abibliadigital.com.br) com a versão NVI. Essa API passou a exigir uma
-// chave de autenticação (Authorization: Bearer <token>) para funcionar,
-// o que fazia o botão de referência falhar sempre para quem não tinha uma
-// chave configurada — por isso ele "nunca funcionava".
+// PARSER DE REFERÊNCIAS: usa o "Bible-Passage-Reference-Parser"
+// (openbibleinfo), a mesma biblioteca mantida pela Adventech para o app
+// Sabbath School (github.com/Adventech) — ver assets/bcv_parser.js
+// (carregado antes deste arquivo, licença MIT em bcv_parser.LICENSE.md).
+// Isso substitui um parser artesanal por regex que, testado contra as
+// 224 referências reais dos 27 estudos, falhava ou perdia pedaços da
+// citação em alguns casos.
 //
-// Trocamos para a bible-api.com, que não exige nenhuma chave e serve o
-// texto de João Ferreira de Almeida (edição histórica, de domínio
-// público — a própria API rotula essa tradução como "Public Domain").
-// Por ser de domínio público, também é seguro mantê-la ao vivo e, se um
-// dia a referência falhar, cair para um link de busca como saída de
-// emergência.
+// TEXTO DO VERSÍCULO: bible-api.com, que declara suporte explícito a
+// CORS para uso direto do navegador e não exige chave/cadastro. A
+// tradução usada é "almeida" (João Ferreira de Almeida, edição
+// histórica), rotulada pela própria API como de domínio público.
+//
+// DIAGNÓSTICO DO "funciona às vezes": ao rodar as 224 referências reais
+// do material pelo parser oficial, ficou claro que 3 delas apontavam
+// para capítulos que não existem no livro citado (ex.: "2João 4:1" —
+// 2 João só tem 1 capítulo). São erros de digitação típicos de troca
+// "1"/"2" em livros numerados; foram corrigidos em assets/data.js para
+// a referência doutrinariamente óbvia (ex.: 1João 4:1). Nenhuma API
+// jamais encontraria texto para um capítulo inexistente.
 // =====================================================================
 
 const BIBLIA_API_BASE = "https://bible-api.com";
 const BIBLIA_VERSAO = "almeida";
-const BIBLIA_NOME_VERSAO = "João Ferreira de Almeida (edição histórica)";
+const BIBLIA_NOME_VERSAO = "João Ferreira de Almeida (edição histórica, domínio público)";
 const BIBLIA_TIMEOUT_MS = 8000;
 
-function normalizarTexto(s) {
-  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-}
+// bcv_parser vem de assets/bcv_parser.js (carregado antes deste script)
+const _bcv = new bcv_parser();
+_bcv.set_options({ invalid_passage_strategy: "include" });
 
-// nomes completos em português (normalizados) -> nome do livro em inglês,
-// que é o identificador aceito pela bible-api.com
-const LIVROS_POR_NOME = {
-  genesis: "genesis", exodo: "exodus", levitico: "leviticus", numeros: "numbers", deuteronomio: "deuteronomy",
-  josue: "joshua", juizes: "judges", rute: "ruth", "1samuel": "1samuel", "2samuel": "2samuel",
-  "1reis": "1kings", "2reis": "2kings", "1cronicas": "1chronicles", "2cronicas": "2chronicles",
-  esdras: "ezra", neemias: "nehemiah", ester: "esther",
-  salmo: "psalms", salmos: "psalms", proverbios: "proverbs", eclesiastes: "ecclesiastes", cantares: "songofsolomon",
-  isaias: "isaiah", jeremias: "jeremiah", lamentacoes: "lamentations", ezequiel: "ezekiel", daniel: "daniel",
-  oseias: "hosea", joel: "joel", amos: "amos", obadias: "obadiah", jonas: "jonah",
-  miqueias: "micah", naum: "nahum", habacuque: "habakkuk", sofonias: "zephaniah", ageu: "haggai",
-  zacarias: "zechariah", malaquias: "malachi",
-  mateus: "matthew", marcos: "mark", lucas: "luke", joao: "john", atos: "acts",
-  romanos: "romans", "1corintios": "1corinthians", "2corintios": "2corinthians", galatas: "galatians",
-  efesios: "ephesians", filipenses: "philippians", colossenses: "colossians",
-  "1tessalonicenses": "1thessalonians", "2tessalonicenses": "2thessalonians",
-  "1timoteo": "1timothy", "2timoteo": "2timothy", tito: "titus", filemom: "philemon",
-  hebreus: "hebrews", tiago: "james", "1pedro": "1peter", "2pedro": "2peter",
-  "1joao": "1john", "2joao": "2john", "3joao": "3john", judas: "jude", apocalipse: "revelation",
+// código OSIS do livro (o que o parser devolve) -> identificador em
+// inglês aceito pela bible-api.com
+const OSIS_PARA_INGLES = {
+  Gen: "genesis", Exod: "exodus", Lev: "leviticus", Num: "numbers", Deut: "deuteronomy",
+  Josh: "joshua", Judg: "judges", Ruth: "ruth", "1Sam": "1 samuel", "2Sam": "2 samuel",
+  "1Kgs": "1 kings", "2Kgs": "2 kings", "1Chr": "1 chronicles", "2Chr": "2 chronicles",
+  Ezra: "ezra", Neh: "nehemiah", Esth: "esther", Job: "job",
+  Ps: "psalms", Prov: "proverbs", Eccl: "ecclesiastes", Song: "song of solomon",
+  Isa: "isaiah", Jer: "jeremiah", Lam: "lamentations", Ezek: "ezekiel", Dan: "daniel",
+  Hos: "hosea", Joel: "joel", Amos: "amos", Obad: "obadiah", Jonah: "jonah",
+  Mic: "micah", Nah: "nahum", Hab: "habakkuk", Zeph: "zephaniah", Hag: "haggai",
+  Zech: "zechariah", Mal: "malachi",
+  Matt: "matthew", Mark: "mark", Luke: "luke", John: "john", Acts: "acts",
+  Rom: "romans", "1Cor": "1 corinthians", "2Cor": "2 corinthians", Gal: "galatians",
+  Eph: "ephesians", Phil: "philippians", Col: "colossians",
+  "1Thess": "1 thessalonians", "2Thess": "2 thessalonians",
+  "1Tim": "1 timothy", "2Tim": "2 timothy", Titus: "titus", Phlm: "philemon",
+  Heb: "hebrews", Jas: "james", "1Pet": "1 peter", "2Pet": "2 peter",
+  "1John": "1 john", "2John": "2 john", "3John": "3 john", Jude: "jude", Rev: "revelation",
 };
 
-// abreviações já usadas diretamente nos dados (ex.: "Hb 9:6", "Êx 40:22")
-// também precisam resolver para o nome em inglês aceito pela API.
-const ABREVIACOES_DIRETAS = {
-  gn: "genesis", ex: "exodus", lv: "leviticus", nm: "numbers", dt: "deuteronomy",
-  js: "joshua", jz: "judges", rt: "ruth", "1sm": "1samuel", "2sm": "2samuel",
-  "1rs": "1kings", "2rs": "2kings", "1cr": "1chronicles", "2cr": "2chronicles",
-  ed: "ezra", ne: "nehemiah", et: "esther", job: "job", sl: "psalms", pv: "proverbs",
-  ec: "ecclesiastes", ct: "songofsolomon", is: "isaiah", jr: "jeremiah", lm: "lamentations",
-  ez: "ezekiel", dn: "daniel", os: "hosea", jl: "joel", am: "amos", ob: "obadiah",
-  jn: "jonah", mq: "micah", na: "nahum", hc: "habakkuk", sf: "zephaniah", ag: "haggai",
-  zc: "zechariah", ml: "malachi", mt: "matthew", mc: "mark", lc: "luke", jo: "john",
-  at: "acts", rm: "romans", "1co": "1corinthians", "2co": "2corinthians", gl: "galatians",
-  ef: "ephesians", fp: "philippians", cl: "colossians", "1ts": "1thessalonians",
-  "2ts": "2thessalonians", "1tm": "1timothy", "2tm": "2timothy", tt: "titus", fm: "philemon",
-  hb: "hebrews", tg: "james", "1pe": "1peter", "2pe": "2peter", "1jo": "1john",
-  "2jo": "2john", "3jo": "3john", jd: "jude", ap: "revelation",
+// código OSIS -> nome do livro em português, só para exibição no popup
+// (independe do idioma que a API devolver).
+const OSIS_PARA_PORTUGUES = {
+  Gen: "Gênesis", Exod: "Êxodo", Lev: "Levítico", Num: "Números", Deut: "Deuteronômio",
+  Josh: "Josué", Judg: "Juízes", Ruth: "Rute", "1Sam": "1 Samuel", "2Sam": "2 Samuel",
+  "1Kgs": "1 Reis", "2Kgs": "2 Reis", "1Chr": "1 Crônicas", "2Chr": "2 Crônicas",
+  Ezra: "Esdras", Neh: "Neemias", Esth: "Ester", Job: "Jó",
+  Ps: "Salmos", Prov: "Provérbios", Eccl: "Eclesiastes", Song: "Cantares",
+  Isa: "Isaías", Jer: "Jeremias", Lam: "Lamentações", Ezek: "Ezequiel", Dan: "Daniel",
+  Hos: "Oséias", Joel: "Joel", Amos: "Amós", Obad: "Obadias", Jonah: "Jonas",
+  Mic: "Miquéias", Nah: "Naum", Hab: "Habacuque", Zeph: "Sofonias", Hag: "Ageu",
+  Zech: "Zacarias", Mal: "Malaquias",
+  Matt: "Mateus", Mark: "Marcos", Luke: "Lucas", John: "João", Acts: "Atos",
+  Rom: "Romanos", "1Cor": "1 Coríntios", "2Cor": "2 Coríntios", Gal: "Gálatas",
+  Eph: "Efésios", Phil: "Filipenses", Col: "Colossenses",
+  "1Thess": "1 Tessalonicenses", "2Thess": "2 Tessalonicenses",
+  "1Tim": "1 Timóteo", "2Tim": "2 Timóteo", Titus: "Tito", Phlm: "Filemom",
+  Heb: "Hebreus", Jas: "Tiago", "1Pet": "1 Pedro", "2Pet": "2 Pedro",
+  "1John": "1 João", "2John": "2 João", "3John": "3 João", Jude: "Judas", Rev: "Apocalipse",
 };
-Object.entries(ABREVIACOES_DIRETAS).forEach(([abbrev, ingles]) => { LIVROS_POR_NOME[abbrev] = ingles; });
 
-// "Jó" é um caso especial: sem acento normaliza para "jo", que colide com
-// "João". Resolvido checando a grafia original antes de normalizar.
-function resolverLivro(tokenOriginal) {
-  const raw = tokenOriginal.trim();
-  if (/^j[óo]$/i.test(raw) && /ó/i.test(raw)) return "job";
-  const key = normalizarTexto(raw.replace(/\s+/g, ""));
-  return LIVROS_POR_NOME[key] || null;
-}
-
-// Extrai uma lista de citações {original, ingles, nomeLivro, capitulo, vIni, vFim}
-// de uma string de referência como "Mateus 24:6, 7, 10; 2Timóteo 3:1-4".
-// Referências sem nome de livro (ex.: "8:32" após "João 16:13;") herdam o
-// livro da citação anterior na mesma string.
+// Extrai uma lista de citações {original, livroOsis, ingles, nomeLivro,
+// capitulo, capituloFim, vIni, vFim} de uma referência em português,
+// usando o parser oficial (assets/bcv_parser.js) em vez de regex caseiro.
 function parseReferencias(refString) {
   if (!refString) return [];
-  const partes = refString.split(";").map((s) => s.trim()).filter(Boolean);
-  const resultados = [];
-  let livroAtual = null;
-  let nomeAtual = null;
+  const osis = _bcv.parse(refString).osis();
+  if (!osis) return [];
 
-  for (const parte of partes) {
-    const mLivro = parte.match(/^((?:[1-3]\s?)?[A-Za-zÀ-ÖØ-öø-ÿçÇ]+)\s+(\d+)(?::(.+))?$/);
-    let capituloStr = null;
-    let resto = null;
-
-    if (mLivro) {
-      const ingles = resolverLivro(mLivro[1]);
-      if (ingles) {
-        livroAtual = ingles;
-        nomeAtual = mLivro[1].trim();
-        capituloStr = mLivro[2];
-        resto = mLivro[3] || null;
-      }
-    }
-
-    if (capituloStr === null) {
-      if (!livroAtual) continue; // sem livro anterior para herdar: ignora esse trecho
-      const mCont = parte.match(/^(\d+)(?::(.+))?$/);
-      if (!mCont) continue;
-      capituloStr = mCont[1];
-      resto = mCont[2] || null;
-    }
-
-    const numeros = resto ? [...resto.matchAll(/\d+/g)].map((m) => parseInt(m[0], 10)) : [];
-    resultados.push({
-      original: parte,
-      ingles: livroAtual,
-      nomeLivro: nomeAtual,
-      capitulo: parseInt(capituloStr, 10),
-      vIni: numeros.length ? Math.min(...numeros) : null,
-      vFim: numeros.length ? Math.max(...numeros) : null,
-    });
-  }
-  return resultados;
+  return osis.split(",").map((pedaco) => {
+    const [inicioStr, fimStr] = pedaco.split("-");
+    const inicio = inicioStr.split(".");
+    const fim = fimStr ? fimStr.split(".") : inicio;
+    const livroOsis = inicio[0];
+    const capitulo = parseInt(inicio[1], 10);
+    const vIni = inicio[2] !== undefined ? parseInt(inicio[2], 10) : null;
+    const capituloFim = fim[1] !== undefined ? parseInt(fim[1], 10) : capitulo;
+    const vFim = fim[2] !== undefined ? parseInt(fim[2], 10) : vIni;
+    return {
+      original: pedaco,
+      livroOsis,
+      ingles: OSIS_PARA_INGLES[livroOsis] || null,
+      nomeLivro: OSIS_PARA_PORTUGUES[livroOsis] || livroOsis,
+      capitulo,
+      capituloFim,
+      vIni,
+      vFim,
+    };
+  }).filter((c) => c.ingles); // descarta o improvável caso de um livro fora do mapa
 }
 
 // Link de emergência: se a API falhar por qualquer razão, o usuário ainda
 // consegue chegar ao texto com um clique, via busca.
 function linkBuscaAlternativa(citacao) {
-  const termo = `${citacao.nomeLivro || citacao.ingles} ${citacao.capitulo}${citacao.vIni ? ":" + citacao.vIni : ""} bíblia`;
+  const termo = `${citacao.nomeLivro} ${citacao.capitulo}${citacao.vIni ? ":" + citacao.vIni : ""} bíblia`;
   return "https://www.google.com/search?q=" + encodeURIComponent(termo);
 }
 
@@ -134,18 +118,22 @@ function fetchComTimeout(url, ms) {
   return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
-// cache simples em memória: evita rebuscar a mesma passagem na mesma sessão
+// cache simples em memória: evita rebuscar o mesmo capítulo na mesma sessão
 const _cacheBiblia = new Map();
 
 async function buscarPassagem(citacao) {
-  const rangeStr = citacao.vIni
-    ? `:${citacao.vIni}${citacao.vFim && citacao.vFim !== citacao.vIni ? "-" + citacao.vFim : ""}`
-    : "";
-  const chave = `${citacao.ingles}:${citacao.capitulo}${rangeStr}`;
+  // referência que atravessa capítulos (raríssimo nos dados: 3 em 421):
+  // busca só o capítulo inicial, sem tentar recortar um intervalo que
+  // cruza capítulos — mais simples e nunca mostra algo errado.
+  const cruzaCapitulo = citacao.capitulo !== citacao.capituloFim;
+  const vIniEfetivo = cruzaCapitulo ? null : citacao.vIni;
+  const vFimEfetivo = cruzaCapitulo ? null : citacao.vFim;
+
+  const chave = `${citacao.ingles}:${citacao.capitulo}`;
   let dados = _cacheBiblia.get(chave);
 
   if (!dados) {
-    const query = `${citacao.ingles} ${citacao.capitulo}${rangeStr}`;
+    const query = `${citacao.ingles} ${citacao.capitulo}`;
     const url = `${BIBLIA_API_BASE}/${encodeURIComponent(query)}?translation=${BIBLIA_VERSAO}`;
     let ultimoErro = null;
     // uma tentativa + uma nova tentativa automática, para lidar com falhas passageiras
@@ -173,9 +161,16 @@ async function buscarPassagem(citacao) {
     _cacheBiblia.set(chave, dados);
   }
 
-  const versiculos = (dados.verses || []).map((v) => ({
+  let versiculos = (dados.verses || []).map((v) => ({
     number: v.verse,
     text: (v.text || "").replace(/\s+/g, " ").trim(),
   }));
-  return { nomeLivro: citacao.nomeLivro || dados.verses?.[0]?.book_name, versiculos };
+  if (vIniEfetivo) {
+    versiculos = versiculos.filter((v) => v.number >= vIniEfetivo && v.number <= (vFimEfetivo || vIniEfetivo));
+  }
+  return {
+    nomeLivro: citacao.nomeLivro,
+    versiculos,
+    aviso: cruzaCapitulo ? `Esta referência continua no capítulo ${citacao.capituloFim} — mostrando o capítulo ${citacao.capitulo} completo.` : null,
+  };
 }
