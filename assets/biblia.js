@@ -2,42 +2,18 @@
 // Texto bíblico ao vivo, para o popup que abre quando o usuário toca numa
 // referência dentro do estudo.
 //
-// Esta é a versão por regex (sem bcv_parser), revisada para corrigir os
-// casos que faziam algumas referências não funcionarem:
+// Histórico: a versão anterior usava a API "A Bíblia Digital"
+// (abibliadigital.com.br) com a versão NVI. Essa API passou a exigir uma
+// chave de autenticação (Authorization: Bearer <token>) para funcionar,
+// o que fazia o botão de referência falhar sempre para quem não tinha uma
+// chave configurada — por isso ele "nunca funcionava".
 //
-// 1) Abreviações com ponto (ex.: "Mt. 5:3", "1 Jo. 4:8") não casavam com
-//    a regex antiga, que exigia as letras do livro seguidas direto de
-//    espaço. Agora o ponto é aceito e ignorado entre o livro e o capítulo.
-//
-// 2) Listas/intervalos de versos ("6, 7, 10" ou "31-33,46") eram
-//    colapsados para um único intervalo mín-máx (ex.: virava 6-10,
-//    incluindo por engano os versos 8 e 9, que não foram citados). Agora
-//    a especificação original é enviada quase intacta para a bible-api,
-//    que já entende listas e intervalos separados por vírgula nativamente
-//    (é o próprio formato de exemplo da documentação deles).
-//
-// 3) Pontuação sobrando no final da citação (parêntese, ponto final de
-//    frase, vírgula) fazia a regex falhar por inteiro e a referência
-//    inteira era descartada. Agora essas sobras são removidas antes do
-//    parse.
-//
-// 4) Referência que cruza capítulos (ex.: "13:24-14:2") era misturada com
-//    a extração ingênua de números e podia gerar um intervalo sem sentido
-//    dentro de um único capítulo. Agora isso é detectado e tratado
-//    buscando o capítulo inicial completo, com um aviso de que a citação
-//    continua no próximo.
-//
-// 5) Citação de um livro sem capítulo/verso (rara, mas possível, ex. só
-//    "Filemom") antes não casava com nenhuma regex e era descartada;
-//    agora assume-se o capítulo 1 como melhor aproximação.
-//
-// 6) Travessão "–"/"—" (comum em texto tipografado) usado no lugar do
-//    hífen comum agora é normalizado antes de montar a consulta, para
-//    não depender de como a bible-api interpreta esse caractere.
-//
-// TEXTO DO VERSÍCULO: bible-api.com, que não exige chave/cadastro e
-// serve a tradução de João Ferreira de Almeida (edição histórica),
-// rotulada pela própria API como de domínio público.
+// Trocamos para a bible-api.com, que não exige nenhuma chave e serve o
+// texto de João Ferreira de Almeida (edição histórica, de domínio
+// público — a própria API rotula essa tradução como "Public Domain").
+// Por ser de domínio público, também é seguro mantê-la ao vivo e, se um
+// dia a referência falhar, cair para um link de busca como saída de
+// emergência.
 // =====================================================================
 
 const BIBLIA_API_BASE = "https://bible-api.com";
@@ -90,127 +66,65 @@ const ABREVIACOES_DIRETAS = {
 Object.entries(ABREVIACOES_DIRETAS).forEach(([abbrev, ingles]) => { LIVROS_POR_NOME[abbrev] = ingles; });
 
 // "Jó" é um caso especial: sem acento normaliza para "jo", que colide com
-// a abreviação de "João". Resolvido checando a grafia original antes de
-// normalizar (só cai em "job" quando o acento está presente).
-function resolverLivro(prefixo, nomeLetras) {
-  if (!prefixo && /^j[óo]$/i.test(nomeLetras) && /ó/i.test(nomeLetras)) return "job";
-  const chave = normalizarTexto(`${prefixo || ""}${nomeLetras}`);
-  return LIVROS_POR_NOME[chave] || null;
+// "João". Resolvido checando a grafia original antes de normalizar.
+function resolverLivro(tokenOriginal) {
+  const raw = tokenOriginal.trim();
+  if (/^j[óo]$/i.test(raw) && /ó/i.test(raw)) return "job";
+  const key = normalizarTexto(raw.replace(/\s+/g, ""));
+  return LIVROS_POR_NOME[key] || null;
 }
 
-// Remove pontuação/parênteses/aspas sobrando nas bordas de uma citação.
-// Seguro porque uma referência válida sempre termina em dígito — nunca em
-// ")", ".", "," etc. — então essas sobras nunca fazem parte da referência.
-function limparParte(s) {
-  return s
-    .replace(/^[\s(\[«"'"]+/, "")
-    .replace(/[\s)\]»"'".,;]+$/, "")
-    .trim();
-}
-
-// Livro + capítulo (+ verso opcional). Aceita ponto depois da abreviação
-// do livro (ex.: "Mt. 5:3", "1 Jo. 4:8").
-const RX_REF = /^(?:([1-3])\s*)?([A-Za-zÀ-ÖØ-öø-ÿçÇ]+)\.?\s+(\d+)(?::\s*(.+))?$/;
-// Só o nome do livro, sem capítulo/verso (ex.: citação genérica a um livro).
-const RX_SOBRENOME = /^(?:([1-3])\s*)?([A-Za-zÀ-ÖØ-öø-ÿçÇ]+)\.?$/;
-// Continuação sem nome de livro (herda o livro da citação anterior),
-// ex.: "8:32" depois de "João 16:13;".
-const RX_CONT = /^(\d+)(?::\s*(.+))?$/;
-
-// Extrai uma lista de citações {original, ingles, nomeLivro, capitulo,
-// capituloFim, versoSpec, aviso} de uma string de referência como
-// "Mateus 24:6, 7, 10; 2Timóteo 3:1-4".
+// Extrai uma lista de citações {original, ingles, nomeLivro, capitulo, vIni, vFim}
+// de uma string de referência como "Mateus 24:6, 7, 10; 2Timóteo 3:1-4".
+// Referências sem nome de livro (ex.: "8:32" após "João 16:13;") herdam o
+// livro da citação anterior na mesma string.
 function parseReferencias(refString) {
   if (!refString) return [];
-  const partes = refString.split(";").map(limparParte).filter(Boolean);
+  const partes = refString.split(";").map((s) => s.trim()).filter(Boolean);
   const resultados = [];
   let livroAtual = null;
   let nomeAtual = null;
 
-  for (const parteOriginal of partes) {
-    let ingles = null;
-    let nomeLivro = null;
-    let capitulo = null;
+  for (const parte of partes) {
+    const mLivro = parte.match(/^((?:[1-3]\s?)?[A-Za-zÀ-ÖØ-öø-ÿçÇ]+)\s+(\d+)(?::(.+))?$/);
+    let capituloStr = null;
     let resto = null;
 
-    let m = parteOriginal.match(RX_REF);
-    if (m) {
-      const resolvido = resolverLivro(m[1], m[2]);
-      if (resolvido) {
-        ingles = resolvido;
-        nomeLivro = (m[1] ? m[1] + " " : "") + m[2];
-        capitulo = parseInt(m[3], 10);
-        resto = m[4] || null;
+    if (mLivro) {
+      const ingles = resolverLivro(mLivro[1]);
+      if (ingles) {
+        livroAtual = ingles;
+        nomeAtual = mLivro[1].trim();
+        capituloStr = mLivro[2];
+        resto = mLivro[3] || null;
       }
     }
 
-    if (ingles === null) {
-      m = parteOriginal.match(RX_SOBRENOME);
-      if (m) {
-        const resolvido = resolverLivro(m[1], m[2]);
-        if (resolvido) {
-          ingles = resolvido;
-          nomeLivro = (m[1] ? m[1] + " " : "") + m[2];
-          capitulo = 1; // sem capítulo/verso informado: melhor aproximação
-          resto = null;
-        }
-      }
+    if (capituloStr === null) {
+      if (!livroAtual) continue; // sem livro anterior para herdar: ignora esse trecho
+      const mCont = parte.match(/^(\d+)(?::(.+))?$/);
+      if (!mCont) continue;
+      capituloStr = mCont[1];
+      resto = mCont[2] || null;
     }
 
-    if (ingles === null) {
-      if (!livroAtual) continue; // sem livro (atual ou herdado): não há o que buscar
-      m = parteOriginal.match(RX_CONT);
-      if (!m) continue;
-      ingles = livroAtual;
-      nomeLivro = nomeAtual;
-      capitulo = parseInt(m[1], 10);
-      resto = m[2] || null;
-    }
-
-    livroAtual = ingles;
-    nomeAtual = nomeLivro;
-
-    let versoSpec = null;
-    let aviso = null;
-    let capituloFim = capitulo;
-
-    if (resto) {
-      const restoLimpo = resto.replace(/[–—]/g, "-").replace(/\s+/g, "");
-      const cruza = restoLimpo.match(/^(\d+)-(\d+):(\d+)$/);
-      if (cruza) {
-        // referência atravessa capítulos: buscamos o capítulo inicial
-        // completo (a partir do verso citado) em vez de tentar recortar
-        // um intervalo que a API não entenderia, e avisamos o usuário.
-        capituloFim = parseInt(cruza[2], 10);
-        aviso = `Esta referência continua no capítulo ${capituloFim} — mostrando o capítulo ${capitulo} completo a partir do verso ${cruza[1]}.`;
-        versoSpec = null;
-      } else {
-        // Mantém listas/intervalos ("6,7,10" ou "31-33,46") como estão:
-        // a bible-api já entende essa sintaxe nativamente, evitando
-        // colapsar tudo num único intervalo contínuo errado.
-        versoSpec = restoLimpo;
-      }
-    }
-
+    const numeros = resto ? [...resto.matchAll(/\d+/g)].map((m) => parseInt(m[0], 10)) : [];
     resultados.push({
-      original: parteOriginal,
-      ingles,
-      nomeLivro,
-      capitulo,
-      capituloFim,
-      versoSpec,
-      aviso,
+      original: parte,
+      ingles: livroAtual,
+      nomeLivro: nomeAtual,
+      capitulo: parseInt(capituloStr, 10),
+      vIni: numeros.length ? Math.min(...numeros) : null,
+      vFim: numeros.length ? Math.max(...numeros) : null,
     });
   }
-
   return resultados;
 }
 
 // Link de emergência: se a API falhar por qualquer razão, o usuário ainda
 // consegue chegar ao texto com um clique, via busca.
 function linkBuscaAlternativa(citacao) {
-  const primeiroVerso = citacao.versoSpec ? citacao.versoSpec.match(/\d+/)?.[0] : null;
-  const termo = `${citacao.nomeLivro || citacao.ingles} ${citacao.capitulo}${primeiroVerso ? ":" + primeiroVerso : ""} bíblia`;
+  const termo = `${citacao.nomeLivro || citacao.ingles} ${citacao.capitulo}${citacao.vIni ? ":" + citacao.vIni : ""} bíblia`;
   return "https://www.google.com/search?q=" + encodeURIComponent(termo);
 }
 
@@ -224,7 +138,9 @@ function fetchComTimeout(url, ms) {
 const _cacheBiblia = new Map();
 
 async function buscarPassagem(citacao) {
-  const rangeStr = citacao.versoSpec ? `:${citacao.versoSpec}` : "";
+  const rangeStr = citacao.vIni
+    ? `:${citacao.vIni}${citacao.vFim && citacao.vFim !== citacao.vIni ? "-" + citacao.vFim : ""}`
+    : "";
   const chave = `${citacao.ingles}:${citacao.capitulo}${rangeStr}`;
   let dados = _cacheBiblia.get(chave);
 
@@ -261,10 +177,5 @@ async function buscarPassagem(citacao) {
     number: v.verse,
     text: (v.text || "").replace(/\s+/g, " ").trim(),
   }));
-
-  return {
-    nomeLivro: citacao.nomeLivro || dados.verses?.[0]?.book_name,
-    versiculos,
-    aviso: citacao.aviso || null,
-  };
+  return { nomeLivro: citacao.nomeLivro || dados.verses?.[0]?.book_name, versiculos };
 }
